@@ -1,4 +1,6 @@
-FROM openjdk:11-jre-slim
+# openjdk:* Docker Hub images were deprecated and removed; Eclipse Temurin is the
+# standard successor (same Debian/Ubuntu apt base, Java 11 JRE for the ALA indexer).
+FROM eclipse-temurin:11-jre
 
 RUN apt-get update && apt-get install -y wget zip unzip curl bash procps
 
