@@ -1,0 +1,4 @@
+taxonID	datasetID	parentNameUsageID	acceptedNameUsageID	originalNameUsageID	scientificName	scientificNameAuthorship	canonicalName	genericName	specificEpithet	infraspecificEpithet	taxonRank
+1					Cenchrus setaceus (Forssk.) Morrone	(Forssk.) Morrone	Cenchrus setaceus				species
+2					Rhopalosiphum Koch, 1854	Koch, 1854	Rhopalosiphum				genus
+3					Festuca alpina Suter	Suter	Festuca alpina				species

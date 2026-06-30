@@ -6,6 +6,12 @@ T=/data/lucene/target
 B=/data/lucene/target/backbone
 DATE=$(date +%Y-%m-%d_%H-%M)
 
+# Source taxonomy DwCA. Default: Catalogue of Life eXtended Release (COL XR), the
+# replacement for the frozen GBIF backbone. Override SRC_TAXONOMY_URL to pin a dated COL
+# release, or to fall back to the legacy GBIF backbone.
+# Legacy GBIF backbone (frozen 2023): https://hosted-datasets.gbif.org/datasets/backbone/current/backbone.zip
+SRC_TAXONOMY_URL="${SRC_TAXONOMY_URL:-https://download.checklistbank.org/col/xr_latest_dwca.zip}"
+
 CMD=$(basename "$0")
 FIND_DOCOPTS=$(which docopts)
 
@@ -53,7 +59,8 @@ fi
 
 if ($backbone)
 then
-  wget -O $T/backbone.zip https://hosted-datasets.gbif.org/datasets/backbone/current/backbone.zip
+  echo "Downloading source taxonomy: $SRC_TAXONOMY_URL"
+  wget -O $T/backbone.zip "$SRC_TAXONOMY_URL"
   if [[ -d "$T/backbone" ]]
   then
     mv "$T/backbone" "$T/backbone-pre-$DATE"

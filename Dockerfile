@@ -6,7 +6,10 @@ ARG NODE_VERSION=18
 ARG URL_IRMNG=https://www.irmng.org/export/IRMNG_genera_DwCA.zip
 ARG URL_NAMESDIST=https://nexus.ala.org.au/service/local/repositories/releases/content/au/org/ala/ala-name-matching-distribution/4.3/ala-name-matching-distribution-4.3-distribution.zip
 ARG URL_NAMESDIST_LEGACY=https://nexus.ala.org.au/repository/releases/au/org/ala/ala-name-matching/3.5/ala-name-matching-3.5-distribution.zip
-ARG URL_GBIF_BACKBONE=https://hosted-datasets.gbif.org/datasets/backbone/current/backbone.zip
+# Source taxonomy: Catalogue of Life eXtended Release (COL XR), the replacement for the
+# frozen GBIF backbone. The active download lives in the `gbif-taxonomy-for-la` script
+# (SRC_TAXONOMY_URL); this ARG documents the default and is overridable at build time.
+ARG URL_SRC_TAXONOMY=https://download.checklistbank.org/col/xr_latest_dwca.zip
 
 # install NodeJS
 RUN apt-get update -yq \

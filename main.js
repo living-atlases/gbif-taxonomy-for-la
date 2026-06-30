@@ -1,7 +1,7 @@
 const { transform } = require('stream-transform');
 
 const fs = require('fs');
-const { taxonTransform, parser, stringifier } = require("./taxonTransform.js");
+const { taxonTransform, columnsFromHeader, GBIF_COLUMNS, parser, stringifier } = require("./taxonTransform.js");
 
 var inputFile = process.argv[2];
 var issuesFile = process.argv[3];
@@ -34,16 +34,24 @@ stringifier.on('finish', function(){  });
 stringifier.pipe(issuesStream);
 
 var atFirstLine = true;
+// Column layout resolved from the header row (GBIF backbone vs COL XR have different orders).
+var cols = GBIF_COLUMNS;
 
 var stats = { authorWithQuote: 0, scientifiNameWithUnderscore: 0, splitted: 0, total: 0 }
 
 const transformer = transform(function(record) {
   if (atFirstLine) {
-    // we skip the first line
+    // The first line is the header: use it to locate the columns by Darwin Core term,
+    // then emit it unchanged (with the extra "Issue" column for the issues file).
     atFirstLine = false;
+    cols = columnsFromHeader(record);
+    if (cols.scientificName < 0 || cols.scientificNameAuthorship < 0) {
+      console.error("ERROR: could not find scientificName/scientificNameAuthorship columns in header: " + record.join(','));
+      process.exit(1);
+    }
     stringifier.write(record.concat([ "Issue" ]));
   } else {
-    record = taxonTransform(record, stats);
+    record = taxonTransform(record, stats, cols);
   }
   return record.join('\t')+'\n';
 });
