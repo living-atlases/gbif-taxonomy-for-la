@@ -47,7 +47,7 @@ pipeline {
 
   environment {
     // Resolve a release suffix once, so every stage uses the same value.
-    RELEASE_SUFFIX = "${params.RELEASE?.trim() ? params.RELEASE.trim() : BUILD_TIMESTAMP}"
+    RELEASE_SUFFIX = "${params.RELEASE?.trim() ?: 'build-' + env.BUILD_NUMBER}"
     FILTER_ARG     = "${params.FILTER_LANG?.trim() ? '--filter_lang=' + params.FILTER_LANG.trim() : ''}"
   }
 
@@ -79,9 +79,10 @@ pipeline {
       // scientificName / scientificNameAuthorship. Heavy download.
       when { expression { return !params.INSPECT_SCHEMA } }
       steps {
-        sh """
-          ./gbif-taxonomy-for-la-docker --backbone ${FILTER_ARG} --name-authors ${RELEASE_SUFFIX}
-        """
+        // Single-quoted: the shell expands $FILTER_ARG/$RELEASE_SUFFIX (declarative
+        // environment{} vars are exported to sh). They are NOT Groovy bindings, so
+        // double-quoted Groovy interpolation ${FILTER_ARG} would throw MissingProperty.
+        sh './gbif-taxonomy-for-la-docker --backbone $FILTER_ARG --name-authors $RELEASE_SUFFIX'
       }
     }
 
@@ -93,7 +94,7 @@ pipeline {
           def flags = ['--namematching-index']
           if (params.LEGACY_INDEX) { flags << '--namematching-index-legacy' }
           if (params.BUILD_DWCA)   { flags << '--dwca' }
-          sh "./gbif-taxonomy-for-la-docker --namematching-distri=${params.NM_DISTRI} ${flags.join(' ')} ${RELEASE_SUFFIX}"
+          sh "./gbif-taxonomy-for-la-docker --namematching-distri=${params.NM_DISTRI} ${flags.join(' ')} ${env.RELEASE_SUFFIX}"
         }
       }
     }
