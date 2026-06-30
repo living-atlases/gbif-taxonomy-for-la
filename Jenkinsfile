@@ -134,8 +134,9 @@ pipeline {
       }
     }
     cleanup {
-      // Free the agent's disk between runs (artifacts are already archived above).
-      sh 'rm -rf target/backbone target/tmp || true'
+      // Free the multi-GB unzipped data between runs, but KEEP target/cache (the ~750 MB
+      // source archive) so the next build reuses it instead of re-downloading.
+      sh 'rm -rf target/backbone target/backbone-pre-* target/tmp || true'
     }
   }
 }

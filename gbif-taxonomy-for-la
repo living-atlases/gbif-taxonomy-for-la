@@ -59,15 +59,25 @@ fi
 
 if ($backbone)
 then
-  echo "Downloading source taxonomy: $SRC_TAXONOMY_URL"
-  wget -O $T/backbone.zip "$SRC_TAXONOMY_URL"
+  # Cache the source archive under $T (the Jenkins workspace volume persists across builds
+  # on the same agent) so we don't re-download ~750 MB every run. `wget -N` (timestamping)
+  # compares the remote Last-Modified/size against the cached copy and only downloads when
+  # COL XR actually changed (it updates ~monthly). Set SKIP_DOWNLOAD=1 to force the cache.
+  CACHE_DIR="$T/cache"
+  mkdir -p "$CACHE_DIR"
+  CACHED_ZIP="$CACHE_DIR/$(basename "$SRC_TAXONOMY_URL")"
+  if [[ -n "$SKIP_DOWNLOAD" && -f "$CACHED_ZIP" ]]; then
+    echo "SKIP_DOWNLOAD set: reusing cached $CACHED_ZIP ($(du -h "$CACHED_ZIP" | cut -f1))"
+  else
+    echo "Fetching source taxonomy (cached; re-downloads only if changed): $SRC_TAXONOMY_URL"
+    (cd "$CACHE_DIR" && wget -N "$SRC_TAXONOMY_URL")
+  fi
   if [[ -d "$T/backbone" ]]
   then
     mv "$T/backbone" "$T/backbone-pre-$DATE"
   fi
-  echo "Unzipping backbone"
-  (cd $T; mkdir backbone; cd backbone; unzip -q $T/backbone.zip)
-  rm "$T/backbone.zip"
+  echo "Unzipping backbone from cache: $CACHED_ZIP"
+  (cd $T; mkdir backbone; cd backbone; unzip -q "$CACHED_ZIP")
 
   if [[ ! -f "$B/Taxon.tsv.orig" ]]; then
     echo "Taxon.tsv.orig doesn't exist. Creating it"
