@@ -4,7 +4,6 @@ FROM eclipse-temurin:11-jre
 
 RUN apt-get update && apt-get install -y wget zip unzip curl bash procps
 
-ARG NODE_VERSION=18
 ARG URL_IRMNG=https://www.irmng.org/export/IRMNG_genera_DwCA.zip
 ARG URL_NAMESDIST=https://nexus.ala.org.au/service/local/repositories/releases/content/au/org/ala/ala-name-matching-distribution/4.3/ala-name-matching-distribution-4.3-distribution.zip
 ARG URL_NAMESDIST_LEGACY=https://nexus.ala.org.au/repository/releases/au/org/ala/ala-name-matching/3.5/ala-name-matching-3.5-distribution.zip
@@ -13,15 +12,12 @@ ARG URL_NAMESDIST_LEGACY=https://nexus.ala.org.au/repository/releases/au/org/ala
 # (SRC_TAXONOMY_URL); this ARG documents the default and is overridable at build time.
 ARG URL_SRC_TAXONOMY=https://download.checklistbank.org/col/xr_latest_dwca.zip
 
-# install NodeJS
+# install NodeJS + npm. The Ubuntu-based Temurin image ships them in its own repos and
+# packages npm separately from nodejs (the old NodeSource setup pulled the distro nodejs
+# without npm -> "npm: not found"). Node 22 from the base runs the transform fine.
 RUN apt-get update -yq \
-    && apt-get install -yq ca-certificates curl gnupg \
-    && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_VERSION.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
-    && apt-get update -yq \
-    && apt-get install nodejs -yq \
-    && npm install -g npm
+    && apt-get install -yq nodejs npm \
+    && node --version && npm --version
 
 RUN npm install -g mocha
 
