@@ -174,6 +174,26 @@ then
   # they fail early — before the heavier end-to-end mocha suite. set -e aborts on failure.
   echo "Running transform checks (scripts/check-transform.js)"
   node scripts/check-transform.js
+
+  # Namematching-server jar: cache it under $T (the persistent workspace volume) so image
+  # builds don't re-hit the ALA Nexus, same pattern as the COL XR archive ($backbone) and
+  # the name-matching distribution. Versioned filename -> a plain existence gate is enough
+  # (release artifacts are immutable). Override the version with NM_SERVER_VER.
+  NM_SERVER_VER="${NM_SERVER_VER:-1.8.1}"
+  NM_SERVER_JAR="$T/cache/ala-namematching-server-$NM_SERVER_VER.jar"
+  # Validate the cached jar, not just its existence: a previous partial/404 download can
+  # leave an unusable file that an existence-only gate keeps forever (java then fails with
+  # "Unable to access jarfile"). Re-download if missing, empty, or not a valid zip/jar.
+  if [[ ! -s "$NM_SERVER_JAR" ]] || ! unzip -tqq "$NM_SERVER_JAR" >/dev/null 2>&1; then
+    mkdir -p "$T/cache"
+    echo "Fetching namematching-server $NM_SERVER_VER (cached after first run)"
+    # Download to .tmp, verify it's a real jar, and mv on success so a bad download isn't cached.
+    wget -nv -O "$NM_SERVER_JAR.tmp" "https://nexus.ala.org.au/repository/releases/au/org/ala/names/ala-namematching-server/$NM_SERVER_VER/ala-namematching-server-$NM_SERVER_VER.jar"
+    unzip -tqq "$NM_SERVER_JAR.tmp" >/dev/null 2>&1 || { echo "ERROR: downloaded namematching-server jar is not a valid jar"; rm -f "$NM_SERVER_JAR.tmp"; exit 1; }
+    mv "$NM_SERVER_JAR.tmp" "$NM_SERVER_JAR"
+  fi
+  ln -sf "$NM_SERVER_JAR" /data/ala-namematching-server.jar
+
   ln -sf "$T/namematching-gbif-backbone-lucene-8-$release_date/" /data/lucene/namematching-nm
   env TAXON_FILE="$B/Taxon-tests.tsv" mocha
 fi
