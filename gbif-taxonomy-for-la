@@ -94,8 +94,9 @@ then
     column_name="language"        # Specify the column name
     language_codes=$filter_lang   # Specify the comma-separated list of language codes
 
-    # Extract the column number dynamically based on the header
-    column_number=$(awk -F'\t' -v column_name="$column_name" 'NR==1 {for (i=1; i<=NF; i++) if ($i == column_name) {print i; exit}}' "$input_file")
+    # Extract the column number dynamically based on the header. Match the term with or
+    # without a namespace prefix: GBIF used "language", COL's DwCA uses "dwc:language".
+    column_number=$(awk -F'\t' -v column_name="$column_name" 'NR==1 {for (i=1; i<=NF; i++) if ($i == column_name || $i ~ ("[:/#]" column_name "$")) {print i; exit}}' "$input_file")
 
     # Check if the column name exists
     if [ -z "$column_number" ]; then
