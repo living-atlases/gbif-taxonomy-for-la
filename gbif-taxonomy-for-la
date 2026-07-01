@@ -70,7 +70,8 @@ then
     echo "SKIP_DOWNLOAD set: reusing cached $CACHED_ZIP ($(du -h "$CACHED_ZIP" | cut -f1))"
   else
     echo "Fetching source taxonomy (cached; re-downloads only if changed): $SRC_TAXONOMY_URL"
-    (cd "$CACHE_DIR" && wget -N "$SRC_TAXONOMY_URL")
+    # -nv: no per-block progress meter (~15k lines for 750 MB); keep errors + the result line.
+    (cd "$CACHE_DIR" && wget -nv -N "$SRC_TAXONOMY_URL")
   fi
   if [[ -d "$T/backbone" ]]
   then
@@ -145,7 +146,7 @@ fi
 if ($name_authors)
 then
   echo "Trying to install node deps"
-  npm install
+  npm install --no-audit --no-fund
 
   echo "Splitting scientificName and scientificNameAuthorship"
   node main.js "$B/Taxon.tsv.orig" "$B/issues.tsv" > "$B/Taxon.tsv"
@@ -164,7 +165,7 @@ then
   mkdir -p "$T/ala-name-matching-distri-$namematching_distri"
   # Nexus 3 path (/repository/releases/). The old Nexus 2 path
   # (/service/local/repositories/releases/content/) was removed and now 404s.
-  wget -O "$T/ala-name-matching-distri-$namematching_distri/ala-name-matching-distribution-$namematching_distri-distribution.zip" "https://nexus.ala.org.au/repository/releases/au/org/ala/ala-name-matching-distribution/$namematching_distri/ala-name-matching-distribution-$namematching_distri-distribution.zip"
+  wget -nv -O "$T/ala-name-matching-distri-$namematching_distri/ala-name-matching-distribution-$namematching_distri-distribution.zip" "https://nexus.ala.org.au/repository/releases/au/org/ala/ala-name-matching-distribution/$namematching_distri/ala-name-matching-distribution-$namematching_distri-distribution.zip"
   (cd "$T/ala-name-matching-distri-$namematching_distri/"; unzip -q "ala-name-matching-distribution-$namematching_distri-distribution.zip")
 fi
 
@@ -184,10 +185,14 @@ then
 #  java -Dlog4j.configuration=file:/usr/lib/nameindexer/log4j.xml -Dfile.encoding=UTF8 -Djava.util.Arrays.useLegacyMergeSort=true -Xmx8g -Xms1g \
 #    -jar /usr/lib/nameindexer/nameindexer.*jar -all --dwca $B --irmng /data/lucene/sources/IRMNG_DWC_HOMONYMS
 
-  /usr/lib/nameindexer/nameindexer --all --dwca "$B" --target /data/lucene/namematching --irmng /data/lucene/sources/IRMNG_DWC_HOMONYMS/ --common "$B/VernacularName.tsv"
+  INDEX_LOG_LEGACY="$T/index-lucene6-$release_date.log"
+  echo "Building legacy Lucene 6 index (full log: $INDEX_LOG_LEGACY) ..."
+  /usr/lib/nameindexer/nameindexer --all --dwca "$B" --target /data/lucene/namematching --irmng /data/lucene/sources/IRMNG_DWC_HOMONYMS/ --common "$B/VernacularName.tsv" > "$INDEX_LOG_LEGACY" 2>&1 \
+    || { echo "ERROR: legacy Lucene 6 index build failed. Last 60 log lines:"; tail -60 "$INDEX_LOG_LEGACY"; exit 1; }
+  echo "Legacy Lucene 6 index built."
 
   cp -a /data/lucene/namematching "$T/$NTLO"
-  (cd "$T"; tar cvfz "$NTL" "$NTLO")
+  (cd "$T"; tar czf "$NTL" "$NTLO")
 fi
 
 if ($namematching_index)
@@ -215,9 +220,16 @@ then
     rm "$T/$NT"
   fi
 
-  (cd "$T/ala-name-matching-distri-$namematching_distri/"; chmod +x ./index.sh ; ./index.sh --all --dwca "$B" --target "$T/$NTO" --irmng /data/lucene/sources/IRMNG_DWC_HOMONYMS/ ) # --common "$B/VernacularName.tsv")
+  # Send the indexer's per-record output to a log file (it's millions of lines) so the
+  # Jenkins console stays readable. On failure we surface the tail; full detail is in the
+  # log file on the workspace. Quality of the index itself is unaffected.
+  INDEX_LOG="$T/index-lucene8-$release_date.log"
+  echo "Building Lucene 8 index (long step; full log: $INDEX_LOG) ..."
+  (cd "$T/ala-name-matching-distri-$namematching_distri/"; chmod +x ./index.sh ; ./index.sh --all --dwca "$B" --target "$T/$NTO" --irmng /data/lucene/sources/IRMNG_DWC_HOMONYMS/ ) > "$INDEX_LOG" 2>&1 \
+    || { echo "ERROR: Lucene 8 index build failed. Last 60 log lines:"; tail -60 "$INDEX_LOG"; exit 1; }
+  echo "Lucene 8 index built ($(grep -c . "$INDEX_LOG") log lines). Summary:"; tail -3 "$INDEX_LOG"
 
-  (cd "$T"; tar cvfz "$NT" "$NTO")
+  (cd "$T"; tar czf "$NT" "$NTO")
 fi
 
 if ($dwca)

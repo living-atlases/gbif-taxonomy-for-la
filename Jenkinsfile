@@ -141,8 +141,8 @@ pipeline {
       // archive) so the next build reuses it. Fallback to a plain rm if the image is absent.
       sh '''
         docker run --rm -v "$PWD/target:/data/lucene/target" --entrypoint bash gbif-taxonomy-for-la \
-          -c 'rm -rf /data/lucene/target/backbone /data/lucene/target/backbone-pre-* /data/lucene/target/tmp' \
-          2>/dev/null || rm -rf target/backbone target/backbone-pre-* target/tmp 2>/dev/null || true
+          -c 'rm -rf /data/lucene/target/backbone /data/lucene/target/backbone-pre-* /data/lucene/target/tmp /data/lucene/target/index-*.log' \
+          2>/dev/null || rm -rf target/backbone target/backbone-pre-* target/tmp target/index-*.log 2>/dev/null || true
       '''
     }
   }
