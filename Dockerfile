@@ -5,7 +5,7 @@ FROM eclipse-temurin:11-jre
 RUN apt-get update && apt-get install -y wget zip unzip curl bash procps
 
 ARG URL_IRMNG=https://www.irmng.org/export/IRMNG_genera_DwCA.zip
-ARG URL_NAMESDIST=https://nexus.ala.org.au/service/local/repositories/releases/content/au/org/ala/ala-name-matching-distribution/4.3/ala-name-matching-distribution-4.3-distribution.zip
+ARG URL_NAMESDIST=https://nexus.ala.org.au/repository/releases/au/org/ala/ala-name-matching-distribution/4.3/ala-name-matching-distribution-4.3-distribution.zip
 ARG URL_NAMESDIST_LEGACY=https://nexus.ala.org.au/repository/releases/au/org/ala/ala-name-matching/3.5/ala-name-matching-3.5-distribution.zip
 # Source taxonomy: Catalogue of Life eXtended Release (COL XR), the replacement for the
 # frozen GBIF backbone. The active download lives in the `gbif-taxonomy-for-la` script

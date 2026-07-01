@@ -135,9 +135,15 @@ pipeline {
       }
     }
     cleanup {
-      // Free the multi-GB unzipped data between runs, but KEEP target/cache (the ~750 MB
-      // source archive) so the next build reuses it instead of re-downloading.
-      sh 'rm -rf target/backbone target/backbone-pre-* target/tmp || true'
+      // The container writes target/* as root, so the Jenkins user can't delete them
+      // (that produced thousands of "Permission denied" lines). Remove the multi-GB
+      // unzipped dirs from inside a root container; KEEP target/cache (the ~750 MB source
+      // archive) so the next build reuses it. Fallback to a plain rm if the image is absent.
+      sh '''
+        docker run --rm -v "$PWD/target:/data/lucene/target" --entrypoint bash gbif-taxonomy-for-la \
+          -c 'rm -rf /data/lucene/target/backbone /data/lucene/target/backbone-pre-* /data/lucene/target/tmp' \
+          2>/dev/null || rm -rf target/backbone target/backbone-pre-* target/tmp 2>/dev/null || true
+      '''
     }
   }
 }

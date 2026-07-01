@@ -5,4 +5,8 @@ if [[ ! -d target ]]; then
 fi
 
 docker run -v "$(pwd)/target:/data/lucene/target" --name gbif-taxonomy-for-la gbif-taxonomy-for-la "$@"
-docker rm gbif-taxonomy-for-la
+status=$?
+docker rm gbif-taxonomy-for-la >/dev/null 2>&1
+# Propagate the container's exit code (NOT `docker rm`'s), otherwise a failure inside the
+# container is swallowed and the pipeline goes green even when the index build failed.
+exit $status
