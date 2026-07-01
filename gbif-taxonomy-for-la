@@ -129,26 +129,32 @@ fi
 
 if ($prepare_tests)
 then
-  echo "Creating a test file with the first 10000 lines and names included in tests"
-  head -10000 "$B/Taxon.tsv.orig" > "$B/Taxon-tests.tsv"
-  grep -oP 'grepName\("\K[^"]*' test/taxonTransformTests.js | while read -r line
-  do
-    output=$(grep -m 1 "$line" "$B/Taxon.tsv.orig" || true)
-    if [ -z "$output" ]; then
-      echo "The specie '$line' was not found, so the test will fail"
-    else
-      echo "$output" >> "$B/Taxon-tests.tsv"
-    fi
-  done
-  # Include taxa needed by the end-to-end namematching tests (e.g. the Oenanthe genus
-  # homonym), which won't be in the first 10k rows. Match the term as a whole tab-field.
-  for term in Oenanthe; do
-    if grep -P "\t${term}\t" "$B/Taxon.tsv.orig" >> "$B/Taxon-tests.tsv"; then
-      echo "Added rows for namematching test taxon '$term'"
-    else
-      echo "WARNING: namematching test taxon '$term' not found (its test may fail)"
-    fi
-  done
+  # Build a self-consistent test subset: the first 10000 rows of Taxon.tsv.orig PLUS the
+  # namematching test taxa (Cenchrus setaceus; both Oenanthe genera) AND their full ancestor
+  # lineage. ala-name-matching needs the parent chain (kingdom..genus) to place a taxon;
+  # COL XR's row order differs from the old GBIF backbone, so those ancestors are not in the
+  # first 10k rows. Without them Cenchrus setaceus does not match and the Oenanthe cross-
+  # kingdom homonym is not detected. Columns are resolved from the header by DwC term
+  # (tolerating a dwc:/URI/col: prefix); Taxon.tsv.orig is read twice.
+  echo "Creating a test subset (first 10000 rows + test taxa + their ancestor lineage)"
+  awk -F'\t' -v FIRST=10000 '
+    function stripns(h){ sub(/^.*[:\/#]/,"",h); return h }
+    function findcol(name,   i,h){ for(i=1;i<=NF;i++){ h=tolower(stripns($i)); if(h==tolower(name)) return i } return 0 }
+    NR==FNR {
+      if(FNR==1){ idc=findcol("taxonID"); pc=findcol("parentNameUsageID"); snc=findcol("scientificName"); trc=findcol("taxonRank")
+        if(!idc||!pc||!snc){ print "prepare-tests: cannot resolve taxonID/parentNameUsageID/scientificName columns" > "/dev/stderr"; exit 1 }
+        next }
+      parent[$idc]=$pc
+      if($snc ~ /^Cenchrus setaceus([ ]|$)/){ seed[$idc]=1; nseed++ }
+      if(trc && tolower($trc)=="genus" && $snc ~ /^Oenanthe([ ]|$)/){ seed[$idc]=1; nseed++ }
+      next
+    }
+    FNR==1 { for(s in seed){ n=s; while(n!="" && !(n in need)){ need[n]=1; nneed++; n=parent[n] } } print; next }
+    { id=$idc; if(FNR<=FIRST || (id in need)){ if(!(id in seen)){ seen[id]=1; print } } }
+    END { printf "prepare-tests: %d seed taxa, %d lineage rows injected into the subset\n", nseed, nneed > "/dev/stderr" }
+  ' "$B/Taxon.tsv.orig" "$B/Taxon.tsv.orig" > "$B/Taxon-tests.tsv" \
+    || { echo "ERROR: could not build the test subset (see message above)"; exit 1; }
+  echo "Test subset built: $(wc -l < "$B/Taxon-tests.tsv") rows"
   echo "Splitting scientificName and scientificNameAuthorship"
   node main.js "$B/Taxon-tests.tsv" "$B/issues.tsv" > "$B/Taxon.tsv"
 fi
