@@ -1,0 +1,6 @@
+query	expectSuccess	expectName	expectAuthor	expectIssues	note
+Oenanthe	false			homonym	cross-kingdom genus homonym (bird Muscicapidae vs plant Apiaceae)
+Cenchrus setaceus	true	Cenchrus setaceus	(Forssk.) Morrone		known accepted name; also exercised by the e2e suite
+Puma concolor	true				stable mammal - curate exact name/author via --record on a full build
+Bellis perennis	true				stable plant - curate via --record
+Danaus plexippus	true				stable insect - curate via --record
