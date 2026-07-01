@@ -36,6 +36,7 @@ Options:
       --name-authors                Split name and authors from the GBIF backbone
       --prepare-tests               Prepare tests
       --tests                       Run tests
+      --regression                  Run the golden-set regression gate (needs a built index)
       --filter_lang=<langs>         Filter VernacularName.tsv file for given language [default: ].
       --namematching-distri=<nmv>   Download ALA namematching-distribution version [default: 4.3].
       --namematching-index          Generate namematching index
@@ -196,6 +197,39 @@ then
 
   ln -sf "$T/namematching-gbif-backbone-lucene-8-$release_date/" /data/lucene/namematching-nm
   env TAXON_FILE="$B/Taxon-tests.tsv" mocha
+fi
+
+if ($regression)
+then
+  # Golden-set regression gate: start the namematching server against the freshly built
+  # index and query a curated set of names (scripts/regression-check.js), failing on any
+  # regression. Server provisioning mirrors the --tests block (validated cached jar).
+  NM_SERVER_VER="${NM_SERVER_VER:-1.8.1}"
+  NM_SERVER_JAR="$T/cache/ala-namematching-server-$NM_SERVER_VER.jar"
+  if [[ ! -s "$NM_SERVER_JAR" ]] || ! unzip -tqq "$NM_SERVER_JAR" >/dev/null 2>&1; then
+    mkdir -p "$T/cache"
+    echo "Fetching namematching-server $NM_SERVER_VER (cached after first run)"
+    wget -nv -O "$NM_SERVER_JAR.tmp" "https://nexus.ala.org.au/repository/releases/au/org/ala/names/ala-namematching-server/$NM_SERVER_VER/ala-namematching-server-$NM_SERVER_VER.jar"
+    unzip -tqq "$NM_SERVER_JAR.tmp" >/dev/null 2>&1 || { echo "ERROR: downloaded namematching-server jar is not a valid jar"; rm -f "$NM_SERVER_JAR.tmp"; exit 1; }
+    mv "$NM_SERVER_JAR.tmp" "$NM_SERVER_JAR"
+  fi
+  ln -sf "$NM_SERVER_JAR" /data/ala-namematching-server.jar
+  ln -sf "$T/namematching-gbif-backbone-lucene-8-$release_date/" /data/lucene/namematching-nm
+
+  echo "Starting namematching server for the regression gate"
+  java -jar /data/ala-namematching-server.jar server /data/config.yml &
+  NM_PID=$!
+  if ! ./node_modules/.bin/wait-on -t 60000 http://localhost:9179; then
+    echo "ERROR: namematching server did not become ready"; kill "$NM_PID" 2>/dev/null || true; exit 1
+  fi
+  # Don't let set -e abort before we stop the server; capture the checker's exit code.
+  set +e
+  node scripts/regression-check.js
+  RC=$?
+  set -e
+  kill "$NM_PID" 2>/dev/null || true
+  [[ $RC -eq 0 ]] || { echo "Regression gate: regressions detected"; exit "$RC"; }
+  echo "Regression gate: no regressions"
 fi
 
 # https://github.com/AtlasOfLivingAustralia/ala-name-matching
