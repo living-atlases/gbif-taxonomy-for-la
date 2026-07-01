@@ -29,6 +29,8 @@ pipeline {
            description: 'Jenkins agent label. Empty = any agent (fine for the schema spike). For the heavy index build set a node with Docker, ≥8–12 GB RAM, large disk.')
     booleanParam(name: 'INSPECT_SCHEMA', defaultValue: true,
            description: 'Run the Step-1 spike only: extract COL DwCA meta.xml + sample rows (no index build), then stop. Defaults true during migration so the first SCM build is safe/light; set false for a real index build.')
+    booleanParam(name: 'TEST_MODE', defaultValue: false,
+           description: 'Fast dev loop: build the index from a ~10k-taxon SUBSET (+ tested species) and run the mocha tests. Skips the full download/index. Minutes, not the full run.')
     string(name: 'RELEASE',       defaultValue: '',
            description: 'Release suffix used in artifact names, e.g. 2026-06-30 or 2026-06-30-sv. Leave empty to use BUILD_TIMESTAMP.')
     string(name: 'NM_DISTRI',     defaultValue: '4.3',
@@ -74,10 +76,21 @@ pipeline {
       }
     }
 
+    stage('Fast test (subset)') {
+      // Fast dev loop: download (cached) -> ~10k-taxon subset -> build a small index ->
+      // run mocha. Two docker runs because the script runs its blocks top-to-bottom, and
+      // the --tests block precedes --namematching-index (so the index must exist first).
+      when { expression { return params.TEST_MODE && !params.INSPECT_SCHEMA } }
+      steps {
+        sh "./gbif-taxonomy-for-la-docker --backbone --prepare-tests --namematching-distri=${params.NM_DISTRI} --namematching-index ${env.RELEASE_SUFFIX}"
+        sh "./gbif-taxonomy-for-la-docker --tests ${env.RELEASE_SUFFIX}"
+      }
+    }
+
     stage('Download taxonomy + split names') {
       // Downloads the source DwCA (COL XR after migration) and splits
       // scientificName / scientificNameAuthorship. Heavy download.
-      when { expression { return !params.INSPECT_SCHEMA } }
+      when { expression { return !params.INSPECT_SCHEMA && !params.TEST_MODE } }
       steps {
         // Single-quoted: the shell expands $FILTER_ARG/$RELEASE_SUFFIX (declarative
         // environment{} vars are exported to sh). They are NOT Groovy bindings, so
@@ -88,7 +101,7 @@ pipeline {
 
     stage('Build indexes + DwCA') {
       // The multi-GB Lucene index build. Memory is bounded by the script's JAVA_OPTIONS (-Xmx).
-      when { expression { return !params.INSPECT_SCHEMA } }
+      when { expression { return !params.INSPECT_SCHEMA && !params.TEST_MODE } }
       steps {
         script {
           def flags = ['--namematching-index']

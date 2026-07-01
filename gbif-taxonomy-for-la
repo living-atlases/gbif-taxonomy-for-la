@@ -140,6 +140,15 @@ then
       echo "$output" >> "$B/Taxon-tests.tsv"
     fi
   done
+  # Include taxa needed by the end-to-end namematching tests (e.g. the Oenanthe genus
+  # homonym), which won't be in the first 10k rows. Match the term as a whole tab-field.
+  for term in Oenanthe; do
+    if grep -P "\t${term}\t" "$B/Taxon.tsv.orig" >> "$B/Taxon-tests.tsv"; then
+      echo "Added rows for namematching test taxon '$term'"
+    else
+      echo "WARNING: namematching test taxon '$term' not found (its test may fail)"
+    fi
+  done
   echo "Splitting scientificName and scientificNameAuthorship"
   node main.js "$B/Taxon-tests.tsv" "$B/issues.tsv" > "$B/Taxon.tsv"
 fi
