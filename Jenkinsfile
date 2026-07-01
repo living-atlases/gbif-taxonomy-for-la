@@ -20,7 +20,8 @@ pipeline {
   options {
     disableConcurrentBuilds()                       // the docker wrapper uses a fixed container name
     timestamps()
-    timeout(time: 6, unit: 'HOURS')
+    // No pipeline timeout: a full (non-TEST_MODE) build indexes all of COL and legitimately
+    // runs many hours — normally overnight. The previous 6h cap aborted build #18 mid-index.
     buildDiscarder(logRotator(numToKeepStr: '10', artifactNumToKeepStr: '3'))  // cap disk on the agent
   }
 
