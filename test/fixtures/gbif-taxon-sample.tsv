@@ -1,4 +1,17 @@
 taxonID	datasetID	parentNameUsageID	acceptedNameUsageID	originalNameUsageID	scientificName	scientificNameAuthorship	canonicalName	genericName	specificEpithet	infraspecificEpithet	taxonRank
-1					Cenchrus setaceus (Forssk.) Morrone	(Forssk.) Morrone	Cenchrus setaceus				species
-2					Rhopalosiphum Koch, 1854	Koch, 1854	Rhopalosiphum				genus
-3					Festuca alpina Suter	Suter	Festuca alpina				species
+cenchrus					Cenchrus setaceus (Forssk.) Morrone	(Forssk.) Morrone	Cenchrus setaceus				species
+rhopalosiphum					Rhopalosiphum Koch, 1854	Koch, 1854	Rhopalosiphum				genus
+festuca					Festuca alpina Suter	Suter	Festuca alpina				species
+striatopollis					Striatopollis trochuensis Ward, 1986	Ward, 1986	Striatopollis trochuensis				species
+anaerofustis					Anaerofustis stercorihominis_A	A	Anaerofustis stercorihominis				species
+perciformorum					Perciformorum, 1900	Perciformorum, 1900	Perciformorum				genus
+epialtoides					Epialtoides hiltoni (Rathbun, 1923)	(Rathbun, 1923)	Epialtoides hiltoni				species
+agrotis					Agrotis segetum (Denis & Schiffermüller), 1775	(Denis & Schiffermüller), 1775	Agrotis segetum				species
+nitella_var					Nitella mucronata var. robustior A.Braun, 1867	A.Braun, 1867	Nitella mucronata var. robustior				variety
+nitella_f					Nitella mucronata f. heteromorpha Fil.	Fil.	Nitella mucronata f. heteromorpha				form
+claroideoglomus					Claroideoglomus luteum (L.J.Kenn., J.C.Stutz & J.B.Morton) C.Walker & A.Schüßler	(L.J.Kenn., J.C.Stutz & J.B.Morton) C.Walker & A.Schüßler	Claroideoglomus luteum				species
+pacispora					Pacispora scintillans (S.L.Rose & Trappe) Sieverd. & Oehl	(S.L.Rose & Trappe) Sieverd. & Oehl	Pacispora scintillans				species
+leucanthemum					Leucanthemum gayanum subsp. demnatense (Murb.), 1939	(Murb.), 1939	Leucanthemum gayanum subsp. demnatense				subspecies
+silene					Silene vulgaris f. vulgaris		Silene vulgaris f. vulgaris				form
+hippomarathrum					Hippomarathrum montanum subsp. polyphyllum (Ten.)	(Ten.)	Hippomarathrum montanum subsp. polyphyllum				subspecies
+erucastrum					Erucastrum nasturtiifolium subsp. nasturtiifolium		Erucastrum nasturtiifolium subsp. nasturtiifolium				subspecies

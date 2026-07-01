@@ -170,6 +170,10 @@ fi
 
 if ($tests)
 then
+  # Deterministic name/author split checks (no index, no server, no download). Fast, and
+  # they fail early — before the heavier end-to-end mocha suite. set -e aborts on failure.
+  echo "Running transform checks (scripts/check-transform.js)"
+  node scripts/check-transform.js
   ln -sf "$T/namematching-gbif-backbone-lucene-8-$release_date/" /data/lucene/namematching-nm
   env TAXON_FILE="$B/Taxon-tests.tsv" mocha
 fi
