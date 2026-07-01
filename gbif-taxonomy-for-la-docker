@@ -4,9 +4,13 @@ if [[ ! -d target ]]; then
   mkdir target
 fi
 
+# Remove any leftover container from a previous (possibly aborted) run so --name doesn't
+# conflict (aborted builds leave the container behind -> "name already in use", exit 125).
+docker rm -f gbif-taxonomy-for-la >/dev/null 2>&1 || true
+
 docker run -v "$(pwd)/target:/data/lucene/target" --name gbif-taxonomy-for-la gbif-taxonomy-for-la "$@"
 status=$?
-docker rm gbif-taxonomy-for-la >/dev/null 2>&1
+docker rm -f gbif-taxonomy-for-la >/dev/null 2>&1 || true
 # Propagate the container's exit code (NOT `docker rm`'s), otherwise a failure inside the
 # container is swallowed and the pipeline goes green even when the index build failed.
 exit $status
