@@ -62,12 +62,16 @@ RUN mkdir -p /data/lucene
 RUN mkdir -p /data/ala-namematching-service/config
 COPY ./subgroups.json /data/ala-namematching-service/config/subgroups.json
 COPY ./groups.json /data/ala-namematching-service/config/groups.json
-RUN wget https://nexus.ala.org.au/repository/releases/au/org/ala/names/ala-namematching-server/1.8.1/ala-namematching-server-1.8.1.jar -O /data/ala-namematching-server.jar
+# The namematching-server jar is fetched and cached at run time by the `--tests` step in
+# gbif-taxonomy-for-la (into $T/cache on the persistent volume) so image builds don't hit
+# the ALA Nexus on every rebuild. See the `if ($tests)` block there.
 COPY ./config.yml /data/config.yml
 
 #COPY col_vernacular.txt.patch
 COPY main.js taxonTransform.js gbif-taxonomy-for-la ./
 COPY test test
+# scripts/ holds check-transform.js (run by the --tests step) and the regression helpers.
+COPY scripts scripts
 
 VOLUME /data/lucene/target
 
