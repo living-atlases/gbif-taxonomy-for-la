@@ -271,9 +271,17 @@ fi
 
 if ($namematching_index)
 then
-  TMPDIR="$T/tmp/"
-  mkdir -p $TMPDIR
-  export JAVA_OPTIONS="-Xmx3g -Xms3g -Djava.io.tmpdir=$TMPDIR"
+  # Keep ALL temp off the small root disk: export (not just assign) TMPDIR so the shell
+  # `sort` the indexer spawns (sed 1d Taxon.tsv | sort) inherits it and spills to the big
+  # workspace volume, and point the JVM's java.io.tmpdir there too.
+  export TMPDIR="$T/tmp/"
+  mkdir -p "$TMPDIR"
+  # LC_ALL=C makes the huge Taxon.tsv sort much faster and lower-memory (byte order, no
+  # locale collation). Inherited by the indexer's child `sort` via the JVM environment.
+  export LC_ALL=C
+  # Indexer heap is configurable so it can use the agent's RAM. It was a fixed -Xmx3g, which
+  # wedged the full-COL build on a 10GB VM. Tune with NM_INDEX_XMX / NM_INDEX_XMS.
+  export JAVA_OPTIONS="-Xmx${NM_INDEX_XMX:-8g} -Xms${NM_INDEX_XMS:-1g} -Djava.io.tmpdir=$TMPDIR"
 
   if [[ ! -d "$T/ala-name-matching-distri-$namematching_distri" ]]
   then
@@ -294,13 +302,27 @@ then
     rm "$T/$NT"
   fi
 
+  # Purge older namematching index builds so the workspace volume doesn't grow without bound
+  # across runs (each uncompressed index dir is multi-GB). Keep this release's dir and all
+  # the small .tgz deliverables (also retained as Jenkins artifacts).
+  if [[ -n "$release_date" ]]; then
+    find "$T" -maxdepth 1 -type d -name 'namematching-gbif-backbone-lucene-*' ! -name "*$release_date*" -exec rm -rf {} + 2>/dev/null || true
+  fi
+
   # Send the indexer's per-record output to a log file (it's millions of lines) so the
   # Jenkins console stays readable. On failure we surface the tail; full detail is in the
   # log file on the workspace. Quality of the index itself is unaffected.
   INDEX_LOG="$T/index-lucene8-$release_date.log"
   echo "Building Lucene 8 index (long step; full log: $INDEX_LOG) ..."
+  # Progress heartbeat to the console every 5 min so a long-but-alive build is clearly
+  # distinguishable from a hung one (the per-record detail goes to $INDEX_LOG, not console).
+  ( while sleep 300; do
+      echo "[index heartbeat $(date -u +%H:%M:%S)] log_lines=$(wc -l < "$INDEX_LOG" 2>/dev/null || echo 0) sorted=$(du -h "$B/Taxon.tsv-sorted" 2>/dev/null | cut -f1) index=$(du -sh "$T/$NTO" 2>/dev/null | cut -f1)"
+    done ) &
+  HB_PID=$!
   (cd "$T/ala-name-matching-distri-$namematching_distri/"; chmod +x ./index.sh ; ./index.sh --all --dwca "$B" --target "$T/$NTO" --irmng /data/lucene/sources/IRMNG_DWC_HOMONYMS/ ) > "$INDEX_LOG" 2>&1 \
-    || { echo "ERROR: Lucene 8 index build failed. Last 60 log lines:"; tail -60 "$INDEX_LOG"; exit 1; }
+    || { kill "$HB_PID" 2>/dev/null || true; echo "ERROR: Lucene 8 index build failed. Last 60 log lines:"; tail -60 "$INDEX_LOG"; exit 1; }
+  kill "$HB_PID" 2>/dev/null || true
   echo "Lucene 8 index built ($(grep -c . "$INDEX_LOG") log lines). Summary:"; tail -3 "$INDEX_LOG"
 
   (cd "$T"; tar czf "$NT" "$NTO")

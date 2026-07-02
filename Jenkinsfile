@@ -136,7 +136,9 @@ pipeline {
   post {
     always {
       // Capture everything useful for review even on failure.
-      archiveArtifacts artifacts: 'target/*.tgz, target/*.zip, target/**/issues.tsv, target/*mapping*.tsv, target/**/regression-report.*',
+      // Archive the index build logs too (runs in `always`, before the `cleanup` rm below,
+      // so they're captured even on abort/failure — the visibility we lacked on #18/#19).
+      archiveArtifacts artifacts: 'target/*.tgz, target/*.zip, target/**/issues.tsv, target/*mapping*.tsv, target/**/regression-report.*, target/index-lucene8-*.log, target/index-lucene6-*.log',
                        allowEmptyArchive: true, fingerprint: true
     }
     success {
