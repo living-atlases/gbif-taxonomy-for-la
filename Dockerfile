@@ -2,7 +2,10 @@
 # standard successor (same Debian/Ubuntu apt base, Java 11 JRE for the ALA indexer).
 FROM eclipse-temurin:11-jre
 
-RUN apt-get update && apt-get install -y wget zip unzip curl bash procps gnu-coreutils
+# --no-install-recommends: gnu-coreutils otherwise drags in a huge desktop/graphics
+# recommends tree (cairo, gdk-pixbuf, glycin-thumbnailers, libjxl...) that bloats the image
+# and slows the build; none of it is needed for a headless indexer.
+RUN apt-get update && apt-get install -y --no-install-recommends wget zip unzip curl bash procps gnu-coreutils
 
 # Ubuntu 26.04 (the Temurin base) ships uutils coreutils; its `sort` 0.8.0 DEADLOCKS on the
 # huge external sort the ALA indexer runs (`sed 1d Taxon.tsv | sort`, ~2.4 GB) and ignores
