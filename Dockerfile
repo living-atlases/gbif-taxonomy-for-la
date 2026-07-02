@@ -2,7 +2,14 @@
 # standard successor (same Debian/Ubuntu apt base, Java 11 JRE for the ALA indexer).
 FROM eclipse-temurin:11-jre
 
-RUN apt-get update && apt-get install -y wget zip unzip curl bash procps
+RUN apt-get update && apt-get install -y wget zip unzip curl bash procps gnu-coreutils
+
+# Ubuntu 26.04 (the Temurin base) ships uutils coreutils; its `sort` 0.8.0 DEADLOCKS on the
+# huge external sort the ALA indexer runs (`sed 1d Taxon.tsv | sort`, ~2.4 GB) and ignores
+# TMPDIR (spilling temp to /tmp on the small root fs — which filled the disk). Point plain
+# `sort` at GNU sort (installed by gnu-coreutils as `gnusort`) via /usr/local/bin, which
+# precedes /usr/bin in PATH. GNU sort honors TMPDIR, so the temp lands on the big volume.
+RUN ln -sf /usr/bin/gnusort /usr/local/bin/sort && sort --version | head -1
 
 ARG URL_IRMNG=https://www.irmng.org/export/IRMNG_genera_DwCA.zip
 ARG URL_NAMESDIST=https://nexus.ala.org.au/repository/releases/au/org/ala/ala-name-matching-distribution/4.3/ala-name-matching-distribution-4.3-distribution.zip
