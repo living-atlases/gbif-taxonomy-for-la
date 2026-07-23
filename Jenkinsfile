@@ -69,20 +69,20 @@ pipeline {
            description: 'Jenkins SSH credential id (SSH Username with private key; SSH Credentials plugin, no ssh-agent). Empty = do NOT use the credential store; rely on PUBLISH_SSH_KEY / the agent user default identity instead.')
     string(name: 'PUBLISH_SSH_KEY',       defaultValue: '/var/lib/jenkins/.ssh/jenkins_datos_gbif_es',
            description: 'On-disk private-key path on the agent, used when PUBLISH_SSH_CRED is empty. Default assumes Jenkins runs as the jenkins user. Empty = agent user default identity.')
-    string(name: 'PUBLISH_HOST',          defaultValue: 'datos.gbif.es',
-           description: 'Publish host')
+    string(name: 'PUBLISH_HOST',          defaultValue: '172.16.16.88',
+           description: 'Primary publish host by internal IP (gbif-es-homedatos-2022). Use a fixed backend IP, NOT datos.gbif.es (round-robin DNS lands on a random backend). homedatos-2025 gets the content via sync_hosts.yml.')
     string(name: 'PUBLISH_USER',          defaultValue: 'ubuntu',
            description: 'SSH user on the publish host (must be able to write the docroots)')
     string(name: 'PUBLISH_OTHERS_PATH',   defaultValue: '/srv/auth.gbif.es/www/others',
-           description: 'Server docroot served at /others (the .tgz land here). datos.gbif.es and demo.gbif.es are CNAMEs to this same vhost, so one publish serves both.')
+           description: 'Server docroot served at /others (the .tgz land here)')
     string(name: 'PUBLISH_NAMEDATA_PATH', defaultValue: '/srv/auth.gbif.es/www/namedata',
            description: 'Server docroot served at /namedata (the DwCA .zip lands here)')
     string(name: 'PUBLISH_URL_BASE',      defaultValue: 'https://datos.gbif.es',
            description: 'Base URL used to build the inventory snippet')
-    booleanParam(name: 'PUBLISH_DEMO',    defaultValue: false,
-           description: 'Extra mirror to a SEPARATE demo docroot. Off by default: datos + demo are CNAMEs to the same vhost (/srv/auth.gbif.es/www), so a single publish already serves both.')
-    string(name: 'DEMO_HOST',             defaultValue: 'demo.gbif.es',
-           description: 'Demo host (only used if PUBLISH_DEMO=true)')
+    booleanParam(name: 'PUBLISH_DEMO',    defaultValue: true,
+           description: 'Also publish to the demo backend. datos.gbif.es round-robins across independent backends that each keep a local copy, so BOTH must receive the files.')
+    string(name: 'DEMO_HOST',             defaultValue: '172.16.16.192',
+           description: 'Demo backend by internal IP (gbif-es-demo-2023). Used when PUBLISH_DEMO=true.')
     string(name: 'DEMO_OTHERS_PATH',      defaultValue: '',
            description: 'Demo docroot served at /others (empty = reuse PUBLISH_OTHERS_PATH)')
     string(name: 'DEMO_NAMEDATA_PATH',    defaultValue: '',
