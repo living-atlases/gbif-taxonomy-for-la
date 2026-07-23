@@ -23,7 +23,9 @@
 #
 # Required env (from the Jenkinsfile params): PUBLISH_HOST PUBLISH_USER
 #   PUBLISH_OTHERS_PATH PUBLISH_NAMEDATA_PATH PUBLISH_URL_BASE
-# Optional env: PUBLISH_DEMO(=true) DEMO_HOST DEMO_OTHERS_PATH DEMO_NAMEDATA_PATH
+# Optional env: PUBLISH_SSH_KEY (private-key path; e.g. Jenkins withCredentials
+#   keyFileVariable — no ssh-agent needed. Unset = use the jenkins user's ~/.ssh identity),
+#   PUBLISH_DEMO(=true) DEMO_HOST DEMO_OTHERS_PATH DEMO_NAMEDATA_PATH
 set -euo pipefail
 
 RELEASE="${1:?usage: publish.sh <release-suffix>}"
@@ -37,7 +39,10 @@ TARGET="target"
 : "${PUBLISH_NAMEDATA_PATH:?set PUBLISH_NAMEDATA_PATH (docroot served at /namedata)}"
 PUBLISH_URL_BASE="${PUBLISH_URL_BASE:-https://${PUBLISH_HOST}}"
 
-SSH_OPTS="-o StrictHostKeyChecking=accept-new -o BatchMode=yes"
+# One ssh command reused for rsync transport and the alias/mkdir calls. No ssh-agent: the
+# key is passed with -i when PUBLISH_SSH_KEY is set (Jenkins sshUserPrivateKey keyFile),
+# otherwise ssh falls back to the jenkins user's default identity.
+SSH_CMD="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes${PUBLISH_SSH_KEY:+ -i $PUBLISH_SSH_KEY}"
 
 # --- resolve deliverables (publish only what the build actually produced) ---
 L8="namematching-gbif-backbone-lucene-8-${RELEASE}.tgz"
@@ -69,17 +74,17 @@ publish_to() {
   echo "== Publishing to ${user}@${host} (others=$others, namedata=$namedata) =="
 
   if [[ ${#others_files[@]} -gt 0 ]]; then
-    rsync -av --partial --progress -e "ssh $SSH_OPTS" \
+    rsync -av --partial --progress -e "$SSH_CMD" \
       "${others_files[@]/#/$TARGET/}" "${user}@${host}:${others}/"
     # Historical `nameindex-*` aliases (same content -> same sha1) as server-side symlinks.
     for f in "${others_files[@]}"; do
-      ssh $SSH_OPTS "${user}@${host}" \
+      $SSH_CMD "${user}@${host}" \
         "cd '$others' && ln -sf '$f' '${f/namematching-/nameindex-}'"
     done
   fi
 
   if [[ -n "$DWCA" ]]; then
-    rsync -av --partial --progress -e "ssh $SSH_OPTS" \
+    rsync -av --partial --progress -e "$SSH_CMD" \
       "$TARGET/$DWCA" "${user}@${host}:${namedata}/"
   fi
 }

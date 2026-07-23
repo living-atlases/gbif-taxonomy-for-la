@@ -66,7 +66,7 @@ pipeline {
            description: 'Publish the index .tgz/.zip to the LA download host(s) via rsync/ssh (see scripts/publish.sh)')
     // --- Publish target (only used when PUBLISH=true) ---
     string(name: 'PUBLISH_SSH_CRED',      defaultValue: 'datos-gbif-es',
-           description: 'Jenkins SSH credential id with access to the publish host(s)')
+           description: 'Jenkins SSH credential id (SSH Username with private key; SSH Credentials plugin, no ssh-agent). Empty = use the jenkins user's own ~/.ssh identity.')
     string(name: 'PUBLISH_HOST',          defaultValue: 'datos.gbif.es',
            description: 'Publish host')
     string(name: 'PUBLISH_USER',          defaultValue: 'ubuntu',
@@ -190,8 +190,18 @@ pipeline {
         DEMO_NAMEDATA_PATH    = "${params.DEMO_NAMEDATA_PATH}"
       }
       steps {
-        sshagent(credentials: [params.PUBLISH_SSH_CRED]) {
-          sh 'bash scripts/publish.sh "$RELEASE_SUFFIX"'
+        // No ssh-agent plugin: bind the SSH private key to a file (SSH Credentials plugin)
+        // and let publish.sh use `ssh -i $PUBLISH_SSH_KEY`. If PUBLISH_SSH_CRED is empty,
+        // fall back to the jenkins user's own ~/.ssh identity.
+        script {
+          if (params.PUBLISH_SSH_CRED?.trim()) {
+            withCredentials([sshUserPrivateKey(credentialsId: params.PUBLISH_SSH_CRED,
+                                               keyFileVariable: 'PUBLISH_SSH_KEY')]) {
+              sh 'bash scripts/publish.sh "$RELEASE_SUFFIX"'
+            }
+          } else {
+            sh 'bash scripts/publish.sh "$RELEASE_SUFFIX"'
+          }
         }
       }
     }
