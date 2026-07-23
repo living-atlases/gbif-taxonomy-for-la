@@ -65,10 +65,10 @@ pipeline {
     booleanParam(name: 'PUBLISH',      defaultValue: false,
            description: 'Publish the index .tgz/.zip to the LA download host(s) via rsync/ssh (see scripts/publish.sh)')
     // --- Publish target (only used when PUBLISH=true) ---
-    string(name: 'PUBLISH_SSH_CRED',      defaultValue: 'datos-gbif-es',
+    string(name: 'PUBLISH_SSH_CRED',      defaultValue: '',
            description: 'Jenkins SSH credential id (SSH Username with private key; SSH Credentials plugin, no ssh-agent). Empty = do NOT use the credential store; rely on PUBLISH_SSH_KEY / the agent user default identity instead.')
-    string(name: 'PUBLISH_SSH_KEY',       defaultValue: '',
-           description: 'On-disk private-key path on the agent, used ONLY when PUBLISH_SSH_CRED is empty (e.g. /home/ubuntu/.ssh/jenkins_datos_gbif_es if the Jenkins process runs as ubuntu). Empty = agent user default identity.')
+    string(name: 'PUBLISH_SSH_KEY',       defaultValue: '/var/lib/jenkins/.ssh/jenkins_datos_gbif_es',
+           description: 'On-disk private-key path on the agent, used when PUBLISH_SSH_CRED is empty. Default assumes Jenkins runs as the jenkins user. Empty = agent user default identity.')
     string(name: 'PUBLISH_HOST',          defaultValue: 'datos.gbif.es',
            description: 'Publish host')
     string(name: 'PUBLISH_USER',          defaultValue: 'ubuntu',
