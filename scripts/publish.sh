@@ -1,6 +1,7 @@
 #!/bin/bash
 # Publish entry point, run on the Jenkins agent by the "Publish" stage
-# (see Jenkinsfile: gated on PUBLISH && !INSPECT_SCHEMA && !TEST_MODE, inside sshagent).
+# (see Jenkinsfile: gated on PUBLISH && !INSPECT_SCHEMA && !TEST_MODE; the key comes from a
+# withCredentials sshUserPrivateKey or PUBLISH_SSH_KEY — no ssh-agent).
 #
 # Unlike the other scripts/*.sh (which exec INSIDE the container), this one runs on the
 # agent HOST: the build artifacts already sit in ./target after the "Build indexes + DwCA"
@@ -74,7 +75,9 @@ publish_to() {
   echo "== Publishing to ${user}@${host} (others=$others, namedata=$namedata) =="
 
   if [[ ${#others_files[@]} -gt 0 ]]; then
-    rsync -av --partial --progress -e "$SSH_CMD" \
+    # --chmod=F644: publish world-readable (like the existing indexes) regardless of the
+    # agent umask, so the download works even if the web server isn't in the www-data group.
+    rsync -av --partial --progress --chmod=F644 -e "$SSH_CMD" \
       "${others_files[@]/#/$TARGET/}" "${user}@${host}:${others}/"
     # Historical `nameindex-*` aliases (same content -> same sha1) as server-side symlinks.
     for f in "${others_files[@]}"; do
@@ -84,7 +87,7 @@ publish_to() {
   fi
 
   if [[ -n "$DWCA" ]]; then
-    rsync -av --partial --progress -e "$SSH_CMD" \
+    rsync -av --partial --progress --chmod=F644 -e "$SSH_CMD" \
       "$TARGET/$DWCA" "${user}@${host}:${namedata}/"
   fi
 }
