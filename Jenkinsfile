@@ -11,6 +11,22 @@
 // Target CI: the Living Atlases community Jenkins (jenkins.gbif.es), alongside
 // `la-docker-images` and the `*-deb-*` jobs.
 
+// --- PROFILE helpers -------------------------------------------------------
+// The Spain (gbif-es) index is the SAME pipeline parameterised: filter vernaculars to
+// es,eu,ca,gl and suffix the release with `-es` (the build names artifacts after the
+// release string, so `-es` is all it takes). PROFILE=es fills those in so you don't have
+// to remember the recipe; explicit RELEASE/FILTER_LANG still win.
+def resolveRelease() {
+  def base = params.RELEASE?.trim() ?: ('build-' + env.BUILD_NUMBER)
+  if (params.PROFILE == 'es' && !base.endsWith('-es')) { base += '-es' }
+  return base
+}
+def resolveLang() {
+  def lang = params.FILTER_LANG?.trim()
+  if (!lang && params.PROFILE == 'es') { lang = 'es,eu,ca,gl' }
+  return lang
+}
+
 pipeline {
 
   // A node with Docker + ≥8–12 GB RAM + plenty of disk. Override the label to match the
@@ -32,8 +48,10 @@ pipeline {
            description: 'Run the Step-1 spike only: extract COL DwCA meta.xml + sample rows (no index build), then stop. Defaults true during migration so the first SCM build is safe/light; set false for a real index build.')
     booleanParam(name: 'TEST_MODE', defaultValue: false,
            description: 'Fast dev loop: build the index from a ~10k-taxon SUBSET (+ tested species) and run the mocha tests. Skips the full download/index. Minutes, not the full run.')
+    choice(name: 'PROFILE', choices: ['generic', 'es'],
+           description: 'generic = backbone with all vernaculars. es = gbif-es index: forces FILTER_LANG=es,eu,ca,gl (if empty) and appends -es to RELEASE (if missing).')
     string(name: 'RELEASE',       defaultValue: '',
-           description: 'Release suffix used in artifact names, e.g. 2026-06-30 or 2026-06-30-sv. Leave empty to use BUILD_TIMESTAMP.')
+           description: 'Release suffix used in artifact names, e.g. 2026-06-30 or 2026-06-30-sv. Leave empty to use BUILD_TIMESTAMP. With PROFILE=es a -es suffix is added automatically.')
     string(name: 'NM_DISTRI',     defaultValue: '4.3',
            description: 'ala-name-matching-distribution version')
     string(name: 'FILTER_LANG',   defaultValue: '',
@@ -45,13 +63,35 @@ pipeline {
     booleanParam(name: 'RUN_REGRESSION', defaultValue: true,
            description: 'Run the baseline-vs-new regression gate (fails the build on unexplained regressions)')
     booleanParam(name: 'PUBLISH',      defaultValue: false,
-           description: 'Publish the index .tgz artifacts to the LA download location')
+           description: 'Publish the index .tgz/.zip to the LA download host(s) via rsync/ssh (see scripts/publish.sh)')
+    // --- Publish target (only used when PUBLISH=true) ---
+    string(name: 'PUBLISH_SSH_CRED',      defaultValue: 'datos-gbif-es',
+           description: 'Jenkins SSH credential id with access to the publish host(s)')
+    string(name: 'PUBLISH_HOST',          defaultValue: 'datos.gbif.es',
+           description: 'Publish host')
+    string(name: 'PUBLISH_USER',          defaultValue: 'ubuntu',
+           description: 'SSH user on the publish host (must be able to write the docroots)')
+    string(name: 'PUBLISH_OTHERS_PATH',   defaultValue: '/srv/auth.gbif.es/www/others',
+           description: 'Server docroot served at /others (the .tgz land here). datos.gbif.es and demo.gbif.es are CNAMEs to this same vhost, so one publish serves both.')
+    string(name: 'PUBLISH_NAMEDATA_PATH', defaultValue: '/srv/auth.gbif.es/www/namedata',
+           description: 'Server docroot served at /namedata (the DwCA .zip lands here)')
+    string(name: 'PUBLISH_URL_BASE',      defaultValue: 'https://datos.gbif.es',
+           description: 'Base URL used to build the inventory snippet')
+    booleanParam(name: 'PUBLISH_DEMO',    defaultValue: false,
+           description: 'Extra mirror to a SEPARATE demo docroot. Off by default: datos + demo are CNAMEs to the same vhost (/srv/auth.gbif.es/www), so a single publish already serves both.')
+    string(name: 'DEMO_HOST',             defaultValue: 'demo.gbif.es',
+           description: 'Demo host (only used if PUBLISH_DEMO=true)')
+    string(name: 'DEMO_OTHERS_PATH',      defaultValue: '',
+           description: 'Demo docroot served at /others (empty = reuse PUBLISH_OTHERS_PATH)')
+    string(name: 'DEMO_NAMEDATA_PATH',    defaultValue: '',
+           description: 'Demo docroot served at /namedata (empty = reuse PUBLISH_NAMEDATA_PATH)')
   }
 
   environment {
-    // Resolve a release suffix once, so every stage uses the same value.
-    RELEASE_SUFFIX = "${params.RELEASE?.trim() ?: 'build-' + env.BUILD_NUMBER}"
-    FILTER_ARG     = "${params.FILTER_LANG?.trim() ? '--filter_lang=' + params.FILTER_LANG.trim() : ''}"
+    // Resolve a release suffix and the vernacular filter once (PROFILE-aware, see the
+    // resolveRelease()/resolveLang() helpers), so every stage uses the same value.
+    RELEASE_SUFFIX = "${resolveRelease()}"
+    FILTER_ARG     = "${resolveLang() ? '--filter_lang=' + resolveLang() : ''}"
   }
 
   stages {
@@ -131,6 +171,30 @@ pipeline {
         sh 'bash scripts/regression-gate.sh "$RELEASE_SUFFIX"'
       }
     }
+
+    stage('Publish') {
+      // Ship the built .tgz/.zip to the LA download host(s): sha1 + rsync to /others and
+      // /namedata, create the historical nameindex-* aliases (server-side symlinks), and
+      // emit a paste-ready inventory snippet. A real stage (not post{}) so the sshagent is
+      // in scope and an upload failure fails the build. See scripts/publish.sh.
+      when { expression { return params.PUBLISH && !params.INSPECT_SCHEMA && !params.TEST_MODE } }
+      environment {
+        PUBLISH_HOST          = "${params.PUBLISH_HOST}"
+        PUBLISH_USER          = "${params.PUBLISH_USER}"
+        PUBLISH_OTHERS_PATH   = "${params.PUBLISH_OTHERS_PATH}"
+        PUBLISH_NAMEDATA_PATH = "${params.PUBLISH_NAMEDATA_PATH}"
+        PUBLISH_URL_BASE      = "${params.PUBLISH_URL_BASE}"
+        PUBLISH_DEMO          = "${params.PUBLISH_DEMO}"
+        DEMO_HOST             = "${params.DEMO_HOST}"
+        DEMO_OTHERS_PATH      = "${params.DEMO_OTHERS_PATH}"
+        DEMO_NAMEDATA_PATH    = "${params.DEMO_NAMEDATA_PATH}"
+      }
+      steps {
+        sshagent(credentials: [params.PUBLISH_SSH_CRED]) {
+          sh 'bash scripts/publish.sh "$RELEASE_SUFFIX"'
+        }
+      }
+    }
   }
 
   post {
@@ -138,15 +202,13 @@ pipeline {
       // Capture everything useful for review even on failure.
       // Archive the index build logs too (runs in `always`, before the `cleanup` rm below,
       // so they're captured even on abort/failure — the visibility we lacked on #18/#19).
-      archiveArtifacts artifacts: 'target/*.tgz, target/*.zip, target/**/issues.tsv, target/*mapping*.tsv, target/**/regression-report.*, target/index-lucene8-*.log, target/index-lucene6-*.log',
+      archiveArtifacts artifacts: 'target/*.tgz, target/*.zip, target/**/issues.tsv, target/*mapping*.tsv, target/**/regression-report.*, target/index-lucene8-*.log, target/index-lucene6-*.log, target/SHA1SUMS-*.txt, target/inventory-snippet-*.ini',
                        allowEmptyArchive: true, fingerprint: true
     }
     success {
       script {
-        if (params.PUBLISH) {
-          // TODO: upload target/*.tgz to the LA download host that la-toolkit / ansible
-          // inventories pull the namematching index from.
-          echo 'PUBLISH requested — wire upload of target/*.tgz to the LA download location.'
+        if (params.PUBLISH && !params.INSPECT_SCHEMA && !params.TEST_MODE) {
+          echo "Published release ${env.RELEASE_SUFFIX}. Grab target/inventory-snippet-${env.RELEASE_SUFFIX}.ini and paste it into la-toolkit gbif-es-local-extras.ini."
         }
       }
     }

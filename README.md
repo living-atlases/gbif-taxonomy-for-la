@@ -68,6 +68,28 @@ Just generate the indexes:
 ./gbif-taxonomy-for-la-docker --namematching-index --namematching-index-legacy 2023-12-18
 ```
 
+## CI (Jenkins) build & publish
+
+The heavy build runs on Jenkins (see [`Jenkinsfile`](Jenkinsfile)) — it downloads the
+source taxonomy and builds the multi-GB Lucene indexes, so it is not meant for a laptop.
+Relevant job parameters:
+
+- `PROFILE` — `generic` (all vernaculars) or `es` (the gbif-es index). `es` forces
+  `FILTER_LANG=es,eu,ca,gl` when empty and appends `-es` to `RELEASE`, so it reproduces the
+  old manual recipe (`--filter_lang=es,eu,ca,gl ... <date>-es`) with a single dropdown.
+- `RELEASE` — release suffix used in every artifact name, e.g. `2026-07-02` (or
+  `2026-07-02-es`, added automatically with `PROFILE=es`).
+- `PUBLISH` (+ `PUBLISH_SSH_CRED`, `PUBLISH_HOST`, `PUBLISH_USER`, `PUBLISH_OTHERS_PATH`,
+  `PUBLISH_NAMEDATA_PATH`, `PUBLISH_URL_BASE`, and the optional `PUBLISH_DEMO`/`DEMO_*`
+  mirror) — when true, [`scripts/publish.sh`](scripts/publish.sh) sha1sums the deliverables,
+  rsyncs the `.tgz` to `/others` and the DwCA `.zip` to `/namedata` on the download host,
+  creates the historical `nameindex-*` aliases (server-side symlinks), and emits
+  `target/inventory-snippet-<release>.ini` — a ready-to-paste fragment (URLs + `sha1:`
+  checksums + datestamp) for la-toolkit's `gbif-es-local-extras.ini`.
+
+Publishing needs a Jenkins SSH credential (`PUBLISH_SSH_CRED`) with access to the download
+host(s) and the real docroots served at `/others` and `/namedata`.
+
 ## Tests
 
 ```
