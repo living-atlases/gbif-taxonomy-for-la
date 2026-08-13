@@ -1,0 +1,13 @@
+# Top-level entries every Lucene 8 name-matching index must ship, one per line.
+# Trailing "/" marks a Lucene sub-index: verify-artifacts.sh additionally requires a
+# segments_* file inside it, which is what ALANameSearcher.findPath() opens.
+#
+# Seeded from the index running in production (gbif-es, namematching-gbif-backbone-lucene-8,
+# both the 2024-02-15-es and the 2026-07-23-es releases have exactly this layout).
+# Extra entries in a new build are reported but do not fail; a missing one does.
+cb/
+id/
+irmng/
+vernacular/
+idmap.txt
+metadata.json

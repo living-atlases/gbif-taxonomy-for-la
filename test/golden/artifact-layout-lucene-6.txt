@@ -1,0 +1,10 @@
+# Top-level entries every legacy Lucene 6 name-matching index must ship, one per line.
+# Trailing "/" marks a Lucene sub-index (see artifact-layout-lucene-8.txt).
+#
+# Seeded from the legacy index in production (/data/lucene/namematching, built by
+# /usr/lib/nameindexer). The Lucene 6 indexer writes no idmap.txt and no metadata.json —
+# that is the real difference with the Lucene 8 layout, not an omission here.
+cb/
+id/
+irmng/
+vernacular/

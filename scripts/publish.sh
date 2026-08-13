@@ -59,6 +59,12 @@ if [[ ${#others_files[@]} -eq 0 && -z "$DWCA" ]]; then
   echo "ERROR: no deliverables found in $TARGET for release '$RELEASE'"; exit 1
 fi
 
+# --- 0) never upload an artifact nobody looked inside ----------------------
+# The Jenkinsfile already runs this in its own stage; repeating it here means a manual
+# `publish.sh` (or a reordered pipeline) cannot skip it. Cheap compared to the rsync.
+# (we are already at the repo root: publish.sh cd's there above)
+bash scripts/verify-artifacts.sh "$RELEASE"
+
 # --- 1) checksums ----------------------------------------------------------
 SHA_FILE="$TARGET/SHA1SUMS-${RELEASE}.txt"
 ( cd "$TARGET" && sha1sum "${others_files[@]}" ${DWCA:+"$DWCA"} ) > "$SHA_FILE"

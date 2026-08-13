@@ -94,6 +94,9 @@ pipeline {
     // resolveRelease()/resolveLang() helpers), so every stage uses the same value.
     RELEASE_SUFFIX = "${resolveRelease()}"
     FILTER_ARG     = "${resolveLang() ? '--filter_lang=' + resolveLang() : ''}"
+    // The bare language list (no --filter_lang prefix), for scripts/verify-artifacts.sh:
+    // with PROFILE=es it asserts no vernacular outside es,eu,ca,gl survived the filter.
+    FILTER_LANG_EFFECTIVE = "${resolveLang() ?: ''}"
   }
 
   stages {
@@ -127,6 +130,10 @@ pipeline {
       steps {
         sh "./gbif-taxonomy-for-la-docker --backbone --prepare-tests --namematching-distri=${params.NM_DISTRI} --namematching-index ${env.RELEASE_SUFFIX}"
         sh "./gbif-taxonomy-for-la-docker --tests ${env.RELEASE_SUFFIX}"
+        // Same packaging code as a full build, so the artifact checks are worth running here
+        // too — this is where they cost seconds instead of half an hour. MIN_CB_BYTES=0
+        // because a ~10k-taxon subset legitimately produces a tiny cb/.
+        sh 'MIN_CB_BYTES=0 FILTER_LANG="$FILTER_LANG_EFFECTIVE" bash scripts/verify-artifacts.sh "$RELEASE_SUFFIX"'
       }
     }
 
@@ -155,6 +162,19 @@ pipeline {
       }
     }
 
+    stage('Verify artifacts') {
+      // Structural validation of what we are about to ship: single root directory, the layout
+      // the known-good indexes have (test/golden/artifact-layout-lucene-*.txt), a segments_*
+      // file in every sub-index, a non-hollow cb/, and a metadata.json whose luceneVersion
+      // matches the artifact name. sha1 only proves the bytes survived the wire; the
+      // regression gate queries a server started against the build directory, never against
+      // the packaged .tgz. Nothing before this stage looked inside the tarball.
+      when { expression { return !params.INSPECT_SCHEMA && !params.TEST_MODE } }
+      steps {
+        sh 'FILTER_LANG="$FILTER_LANG_EFFECTIVE" bash scripts/verify-artifacts.sh "$RELEASE_SUFFIX"'
+      }
+    }
+
     stage('Legacy → COL id mapping') {
       // Step 5: emit the GBIF-integer-taxonKey → COL-id mapping sidecar so historical
       // LA taxonConceptIDs still resolve. TODO: wire to the mapping-download step once added.
@@ -179,7 +199,12 @@ pipeline {
       // /namedata, create the historical nameindex-* aliases (server-side symlinks), and
       // emit a paste-ready inventory snippet. A real stage (not post{}) so the sshagent is
       // in scope and an upload failure fails the build. See scripts/publish.sh.
-      when { expression { return params.PUBLISH && !params.INSPECT_SCHEMA && !params.TEST_MODE } }
+      // TEST_MODE is allowed here on purpose: the ~10k-taxon subset goes through the SAME
+      // packaging and publishing code, and a few-MB index is what la-docker-compose CI should
+      // download instead of the 1.1 GB production one on every clean build (see the guard
+      // below — the release must be named as a test artifact so it can never overwrite a real
+      // one). Build it with TEST_MODE=true PUBLISH=true RELEASE=testsubset.
+      when { expression { return params.PUBLISH && !params.INSPECT_SCHEMA } }
       environment {
         PUBLISH_HOST          = "${params.PUBLISH_HOST}"
         PUBLISH_USER          = "${params.PUBLISH_USER}"
@@ -190,8 +215,22 @@ pipeline {
         DEMO_HOST             = "${params.DEMO_HOST}"
         DEMO_OTHERS_PATH      = "${params.DEMO_OTHERS_PATH}"
         DEMO_NAMEDATA_PATH    = "${params.DEMO_NAMEDATA_PATH}"
+        // publish.sh re-runs scripts/verify-artifacts.sh before uploading anything; give it
+        // the same context the dedicated stage gets. A subset index legitimately has a tiny
+        // cb/, so the "hollow index" floor has to come down for TEST_MODE.
+        FILTER_LANG  = "${resolveLang() ?: ''}"
+        MIN_CB_BYTES = "${params.TEST_MODE ? '0' : '50000000'}"
       }
       steps {
+        // A subset build must never land on a release name a real index could use: the
+        // download hosts key artifacts by name only, and overwriting the production index
+        // with 10k taxa would be silent until name matching started missing everything.
+        script {
+          if (params.TEST_MODE && !(env.RELEASE_SUFFIX ==~ /(?i).*(test|subset).*/)) {
+            error("TEST_MODE publish refused: RELEASE_SUFFIX='${env.RELEASE_SUFFIX}' does not look " +
+                  "like a test artifact. Use RELEASE=testsubset (or any name containing test/subset).")
+          }
+        }
         // No ssh-agent plugin: bind the SSH private key to a file (SSH Credentials plugin)
         // and let publish.sh use `ssh -i $PUBLISH_SSH_KEY`. If PUBLISH_SSH_CRED is empty,
         // fall back to the jenkins user's own ~/.ssh identity.
