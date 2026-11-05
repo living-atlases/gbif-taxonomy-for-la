@@ -169,7 +169,7 @@ verify_dwca() {
       note "no language column in VernacularName.tsv, skipping the FILTER_LANG check"
     else
       local allowed unexpected
-      allowed="$(printf '%s' "$FILTER_LANG" | tr ',' '\n' | tr -d ' ' | grep -v '^$' | sort -u)"
+      allowed="$(bash scripts/lang-codes.sh "$FILTER_LANG" | sort -u)"
       unexpected="$(unzip -p "$zip" VernacularName.tsv | tail -n +2 | cut -f"$col" \
                     | tr '[:upper:]' '[:lower:]' | sort -u | grep -v '^$' \
                     | comm -23 - <(printf '%s\n' "$allowed") || true)"

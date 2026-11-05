@@ -105,14 +105,18 @@ then
         exit 1
     fi
 
-    # Convert the language codes to a pattern for awk
-    language_pattern=$(echo "$language_codes" | tr ',' '|')
+    # Exact, case-insensitive match on each code, and each ISO 639-1 code also accepts its
+    # ISO 639-3 form: the GBIF backbone used "es", COL XR uses "spa". (A substring match
+    # here dropped every "spa" name with es,eu,ca,gl and let "deu", "ces", "est"... through.)
+    language_set=$(scripts/lang-codes.sh "$language_codes")
+    echo "Keeping vernacular languages: $(echo $language_set)"
 
     # Print the header to the output file
     awk -F'\t' 'NR==1 {print; exit}' "$input_file" > "$output_file"
 
-    # Filter rows based on the specified column and case-insensitive language codes, and append to the output file
-    awk -v column_number="$column_number" -v language_pattern="$language_pattern" -F'\t' 'tolower($column_number) ~ tolower(language_pattern)' "$input_file" >> "$output_file"
+    awk -v column_number="$column_number" -v codes="$language_set" -F'\t' '
+      BEGIN { n=split(codes, c, /[ \n]+/); for(i=1;i<=n;i++) if(c[i]!="") keep[c[i]] }
+      FNR>1 && (tolower($column_number) in keep)' "$input_file" >> "$output_file"
 
     echo "Filtered data saved to $output_file"
   fi
