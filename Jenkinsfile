@@ -191,7 +191,7 @@ pipeline {
       // Step 7: replay the Step-0 corpus through the new index and diff against the
       // committed baseline (compare on resolved name/rank/classification, NOT raw id).
       // Non-fatal until the harness lands, then it should fail the build on regressions.
-      when { expression { return params.RUN_REGRESSION && fileExists('scripts/regression-gate.sh') } }
+      when { expression { return params.RUN_REGRESSION && !params.INSPECT_SCHEMA && fileExists('scripts/regression-gate.sh') } }
       steps {
         sh 'bash scripts/regression-gate.sh "$RELEASE_SUFFIX"'
       }
