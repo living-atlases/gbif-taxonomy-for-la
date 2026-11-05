@@ -49,13 +49,15 @@ SSH_CMD="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes${PUBLISH_SSH_K
 L8="namematching-gbif-backbone-lucene-8-${RELEASE}.tgz"
 L6="namematching-gbif-backbone-lucene-6-${RELEASE}.tgz"
 DWCA="gbif-backbone-${RELEASE}.zip"
+AIDX="atlas-index-${RELEASE}.zip"
 
 others_files=()
 [[ -f "$TARGET/$L8" ]] && others_files+=("$L8")
 [[ -f "$TARGET/$L6" ]] && others_files+=("$L6")
 [[ -f "$TARGET/$DWCA" ]] || DWCA=""   # DwCA optional (BUILD_DWCA)
+[[ -f "$TARGET/$AIDX" ]] || AIDX=""   # atlas-index package optional (BUILD_ATLAS_INDEX)
 
-if [[ ${#others_files[@]} -eq 0 && -z "$DWCA" ]]; then
+if [[ ${#others_files[@]} -eq 0 && -z "$DWCA" && -z "$AIDX" ]]; then
   echo "ERROR: no deliverables found in $TARGET for release '$RELEASE'"; exit 1
 fi
 
@@ -67,13 +69,14 @@ bash scripts/verify-artifacts.sh "$RELEASE"
 
 # --- 1) checksums ----------------------------------------------------------
 SHA_FILE="$TARGET/SHA1SUMS-${RELEASE}.txt"
-( cd "$TARGET" && sha1sum "${others_files[@]}" ${DWCA:+"$DWCA"} ) > "$SHA_FILE"
+( cd "$TARGET" && sha1sum "${others_files[@]}" ${DWCA:+"$DWCA"} ${AIDX:+"$AIDX"} ) > "$SHA_FILE"
 echo "Checksums:"; cat "$SHA_FILE"
 
 sha1_of() { awk -v f="$1" '$2==f {print $1}' "$SHA_FILE"; }
 SHA_L8="$( [[ -f "$TARGET/$L8" ]] && sha1_of "$L8" || true )"
 SHA_L6="$( [[ -f "$TARGET/$L6" ]] && sha1_of "$L6" || true )"
 SHA_DWCA="$( [[ -n "$DWCA" ]] && sha1_of "$DWCA" || true )"
+SHA_AIDX="$( [[ -n "$AIDX" ]] && sha1_of "$AIDX" || true )"
 
 # --- rsync + alias helper (run once per target host) -----------------------
 publish_to() {
@@ -95,6 +98,11 @@ publish_to() {
   if [[ -n "$DWCA" ]]; then
     rsync -av --partial --progress --chmod=F644 -e "$SSH_CMD" \
       "$TARGET/$DWCA" "${user}@${host}:${namedata}/"
+  fi
+
+  if [[ -n "$AIDX" ]]; then
+    rsync -av --partial --progress --chmod=F644 -e "$SSH_CMD" \
+      "$TARGET/$AIDX" "${user}@${host}:${namedata}/"
   fi
 }
 
@@ -129,6 +137,11 @@ SNIPPET="$TARGET/inventory-snippet-${RELEASE}.ini"
   if [[ -n "$SHA_DWCA" ]]; then
     echo "custom_namedata_repo                = ${PUBLISH_URL_BASE}/namedata"
     echo "custom_name_sources                 = [{ \"name\": \"gbif-backbone\", \"checksum\": \"sha1:${SHA_DWCA}\", \"datestamp\": \"${RELEASE}\" }]"
+  fi
+  if [[ -n "$SHA_AIDX" ]]; then
+    echo "# atlas-index search-service taxonomy (DwCA + names-extract CSVs), see README"
+    echo "atlas_index_taxonomy_url            = ${PUBLISH_URL_BASE}/namedata/${AIDX}"
+    echo "atlas_index_taxonomy_sha1           = ${SHA_AIDX}"
   fi
 } > "$SNIPPET"
 

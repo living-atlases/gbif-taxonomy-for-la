@@ -1,3 +1,25 @@
+# names-extract (atlas-index): exports from the Lucene 8 index the CSVs atlas-index's
+# search-service reads on its DwCA import (lsid-left-right.csv, lsid-vernacularName.csv).
+# Built here, pinned to an atlas-index commit, so the CSVs always come from the same
+# ala-namematching-server version (1.8.1) as the --tests/--regression steps.
+FROM alpine/git:2.47.2 AS names-extract-src
+ARG ATLAS_INDEX_REF=38f036a1d8f9fcea8367afebcd21d6ab30e34787
+RUN git init /src && cd /src \
+    && git remote add origin https://github.com/AtlasOfLivingAustralia/atlas-index.git \
+    && git fetch --depth 1 origin "$ATLAS_INDEX_REF" && git checkout FETCH_HEAD
+# Until it is fixed upstream: names-extract NPEs on an id the index cannot match (COL XR has
+# vernacular names of ids that are not in the taxonomy).
+COPY patches/names-extract-null-match.patch /tmp/
+RUN cd /src && git apply /tmp/names-extract-null-match.patch
+
+FROM maven:3.9-eclipse-temurin-11 AS names-extract
+COPY --from=names-extract-src /src/names-extract /src
+WORKDIR /src
+# Its pom still points at the Nexus 2 paths (/content/repositories/...), which 404 now.
+RUN sed -i 's#nexus.ala.org.au/content/repositories/#nexus.ala.org.au/repository/#' pom.xml \
+    && mvn -q -B package -DskipTests \
+    && cp target/names-extract-*-jar-with-dependencies.jar /names-extract.jar
+
 # openjdk:* Docker Hub images were deprecated and removed; Eclipse Temurin is the
 # standard successor (same Debian/Ubuntu apt base, Java 11 JRE for the ALA indexer).
 FROM eclipse-temurin:11-jre
@@ -76,6 +98,7 @@ COPY ./groups.json /data/ala-namematching-service/config/groups.json
 # gbif-taxonomy-for-la (into $T/cache on the persistent volume) so image builds don't hit
 # the ALA Nexus on every rebuild. See the `if ($tests)` block there.
 COPY ./config.yml /data/config.yml
+COPY --from=names-extract /names-extract.jar /usr/lib/names-extract/names-extract.jar
 
 #COPY col_vernacular.txt.patch
 COPY main.js taxonTransform.js gbif-taxonomy-for-la ./

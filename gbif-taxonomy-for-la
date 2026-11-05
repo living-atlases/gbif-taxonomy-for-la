@@ -42,6 +42,7 @@ Options:
       --namematching-index          Generate namematching index
       --namematching-index-legacy   Generate namematching index legacy (pre namemaching-service)
       --dwca                        Regenerate the dwca zip
+      --atlas-index                 Package the taxonomy for atlas-index's search-service (needs the Lucene 8 index)
       --help                        Show help options.
       --version                     Print program version.
 ----
@@ -141,22 +142,46 @@ then
   # first 10k rows. Without them Cenchrus setaceus does not match and the Oenanthe cross-
   # kingdom homonym is not detected. Columns are resolved from the header by DwC term
   # (tolerating a dwc:/URI/col: prefix); Taxon.tsv.orig is read twice.
-  echo "Creating a test subset (first 10000 rows + test taxa + their ancestor lineage)"
-  awk -F'\t' -v FIRST=10000 '
+  # SUBSET_ROOT=<scientific name> (e.g. Carnivora) replaces the first 10000 rows with that
+  # whole clade: every taxon under it, the synonyms of those, and the root's lineage. The
+  # first rows of COL XR have no ancestors in the subset, so the indexer drops them; a clade
+  # is what gives a usable small taxonomy (atlas-index search-service, CI, demos).
+  if [[ -n "$SUBSET_ROOT" ]]; then
+    echo "Creating a test subset (clade $SUBSET_ROOT + test taxa + their ancestor lineage)"
+    SUBSET_FIRST=0
+  else
+    echo "Creating a test subset (first 10000 rows + test taxa + their ancestor lineage)"
+    SUBSET_FIRST=10000
+  fi
+  awk -F'\t' -v FIRST="$SUBSET_FIRST" -v ROOT="$SUBSET_ROOT" '
     function stripns(h){ sub(/^.*[:\/#]/,"",h); return h }
     function findcol(name,   i,h){ for(i=1;i<=NF;i++){ h=tolower(stripns($i)); if(h==tolower(name)) return i } return 0 }
     NR==FNR {
-      if(FNR==1){ idc=findcol("taxonID"); pc=findcol("parentNameUsageID"); snc=findcol("scientificName"); trc=findcol("taxonRank")
+      if(FNR==1){ idc=findcol("taxonID"); pc=findcol("parentNameUsageID"); snc=findcol("scientificName"); trc=findcol("taxonRank"); ac=findcol("acceptedNameUsageID"); stc=findcol("taxonomicStatus")
         if(!idc||!pc||!snc){ print "prepare-tests: cannot resolve taxonID/parentNameUsageID/scientificName columns" > "/dev/stderr"; exit 1 }
         next }
       parent[$idc]=$pc
+      if(ac && $ac!="" && $ac!=$idc) accepted[$idc]=$ac
       if($snc ~ /^Cenchrus setaceus([ ]|$)/){ seed[$idc]=1; nseed++ }
       if(trc && tolower($trc)=="genus" && $snc ~ /^Oenanthe([ ]|$)/){ seed[$idc]=1; nseed++ }
+      if(ROOT!="" && $snc ~ ("^" ROOT "([ ]|$)") && (!stc || tolower($stc) ~ /^accepted/)){ root[$idc]=1; seed[$idc]=1; nroot++ }
       next
     }
+    # In the clade if the id, or the taxon a synonym points to, has the root in its parent
+    # chain. Memoised (clade[]) so each chain is walked once over the 8.5M COL rows.
+    function inclade(id,   n,k,path,res){
+      n=(id in accepted) ? accepted[id] : id; k=0
+      while(n!="" && !(n in clade) && !(n in root)){ path[++k]=n; n=parent[n] }
+      res=(n in root) ? 1 : ((n in clade) ? clade[n] : 0)
+      while(k>0) clade[path[k--]]=res
+      return res
+    }
     FNR==1 { for(s in seed){ n=s; while(n!="" && !(n in need)){ need[n]=1; nneed++; n=parent[n] } } print; next }
-    { id=$idc; if(FNR<=FIRST || (id in need)){ if(!(id in seen)){ seen[id]=1; print } } }
-    END { printf "prepare-tests: %d seed taxa, %d lineage rows injected into the subset\n", nseed, nneed > "/dev/stderr" }
+    { id=$idc; if(FNR<=FIRST || (id in need) || (nroot && inclade(id))){ if(!(id in seen)){ seen[id]=1; print } } }
+    END {
+      printf "prepare-tests: %d seed taxa, %d lineage rows injected into the subset\n", nseed, nneed > "/dev/stderr"
+      if(ROOT!="" && !nroot){ print "prepare-tests: SUBSET_ROOT " ROOT " not found" > "/dev/stderr"; exit 1 }
+    }
   ' "$B/Taxon.tsv.orig" "$B/Taxon.tsv.orig" > "$B/Taxon-tests.tsv" \
     || { echo "ERROR: could not build the test subset (see message above)"; exit 1; }
   echo "Test subset built: $(wc -l < "$B/Taxon-tests.tsv") rows"
@@ -343,3 +368,63 @@ then
   (cd $B; zip "$T/$DWCA_FILE" * --exclude *.orig *-tests.tsv issues.tsv *-sorted )
 fi
 
+if ($atlas_index)
+then
+  # atlas-index's search-service imports the taxonomy from an unpacked DwCA (dwca.dir) plus two
+  # CSVs that only the Lucene index has: left/right values and the preferred common name, as
+  # ala-namematching-service resolves them (dwca.extract.leftRightCsvPath /
+  # dwca.extract.commonNamePath). names-extract exports them from the index built above, so
+  # DwCA, CSVs and index all come from the same taxonomy. With --prepare-tests the DwCA
+  # extensions are cut down to the subset's taxa as well.
+  NTO_DIR="$T/namematching-gbif-backbone-lucene-8-$release_date"
+  if [[ ! -d "$NTO_DIR/cb" ]]; then
+    echo "ERROR: --atlas-index needs the Lucene 8 index ($NTO_DIR). Run --namematching-index first."
+    exit 1
+  fi
+
+  AI="atlas-index-$release_date"
+  AIZ="atlas-index-$release_date.zip"
+  rm -rf "${T:?}/$AI" "$T/$AIZ"
+  mkdir -p "$T/$AI/dwca/$release_date"
+
+  echo "Extracting left/right and vernacular CSVs from $NTO_DIR (names-extract)"
+  EXTRACT_LOG="$T/names-extract-$release_date.log"
+  # names-extract is a Dropwizard app: it writes the CSVs in its working dir, prints FINISHED
+  # and then keeps serving. Wait for that line (or for an early exit) and stop it.
+  ( cd "$T/$AI" && exec java -Xmx${NM_INDEX_XMX:-8g} -Dlucene.dir="$NTO_DIR" \
+      -jar /usr/lib/names-extract/names-extract.jar server ) > "$EXTRACT_LOG" 2>&1 &
+  EX_PID=$!
+  while kill -0 "$EX_PID" 2>/dev/null && ! grep -q '^FINISHED' "$EXTRACT_LOG"; do sleep 5; done
+  kill "$EX_PID" 2>/dev/null || true
+  wait "$EX_PID" 2>/dev/null || true
+  if ! grep -q '^FINISHED' "$EXTRACT_LOG"; then
+    echo "ERROR: names-extract failed. Last 60 log lines:"; tail -60 "$EXTRACT_LOG"; exit 1
+  fi
+  # lsid-speciesGroups.csv is only a test aid for search-service vs namematching-service.
+  rm -f "$T/$AI/lsid-speciesGroups.csv"
+  for f in lsid-left-right.csv lsid-vernacularName.csv; do
+    [[ -s "$T/$AI/$f" ]] || { echo "ERROR: names-extract produced no $f"; exit 1; }
+    echo "$f: $(wc -l < "$T/$AI/$f") rows"
+  done
+
+  # The DwCA as the namematching index saw it: the transformed Taxon.tsv (subset or full) and
+  # the archive's other files. Extension rows are keyed by the core id in their first column.
+  (cd "$B"; for f in *; do
+    case "$f" in *.orig|*-tests.tsv|issues.tsv|*-sorted|Taxon.tsv) continue ;; esac
+    cp -a "$f" "$T/$AI/dwca/$release_date/"
+  done)
+  cp "$B/Taxon.tsv" "$T/$AI/dwca/$release_date/Taxon.tsv"
+  if ($prepare_tests)
+  then
+    cut -f1 "$B/Taxon.tsv" | sed 1d > "$T/$AI/ids.txt"
+    for f in "$T/$AI/dwca/$release_date"/*.tsv "$T/$AI/dwca/$release_date"/*.txt; do
+      [[ -f "$f" && "$(basename "$f")" != Taxon.tsv ]] || continue
+      awk -F'\t' 'NR==FNR { keep[$1]; next } FNR==1 || ($1 in keep)' "$T/$AI/ids.txt" "$f" > "$f.subset"
+      mv "$f.subset" "$f"
+    done
+    rm "$T/$AI/ids.txt"
+  fi
+
+  (cd "$T"; zip -qr "$AIZ" "$AI")
+  echo "atlas-index package: $T/$AIZ ($(du -h "$T/$AIZ" | cut -f1))"
+fi

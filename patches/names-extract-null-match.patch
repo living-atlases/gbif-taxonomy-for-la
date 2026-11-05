@@ -1,0 +1,28 @@
+diff --git a/names-extract/src/main/java/au/org/ala/ExtractApplication.java b/names-extract/src/main/java/au/org/ala/ExtractApplication.java
+index a8a6a2e..4d1a959 100644
+--- a/names-extract/src/main/java/au/org/ala/ExtractApplication.java
++++ b/names-extract/src/main/java/au/org/ala/ExtractApplication.java
+@@ -96,6 +96,11 @@ public class ExtractApplication extends Application<ALANameMatchingServiceConfig
+             for (String lsid : vernacularLsids) {
+                 NameUsageMatch result = resource.match(NameSearch.builder().taxonConceptID(lsid).build());
+ 
++                if (result.getTaxonConceptID() == null) {
++                    // no match (e.g. a vernacular name of an id that is not in the taxonomy)
++                    continue;
++                }
++
+                 if (!result.getTaxonConceptID().equals(lsid)) {
+                     // there were only 2 records where this was the case, include them
+                     writer.writeNext(new String[] { result.getTaxonConceptID(), result.getVernacularName() });
+@@ -128,6 +133,11 @@ public class ExtractApplication extends Application<ALANameMatchingServiceConfig
+             for (String lsid : taxonLsids) {
+                 NameUsageMatch result = resource.match(NameSearch.builder().taxonConceptID(lsid).build());
+ 
++                if (result.getTaxonConceptID() == null) {
++                    // no match (e.g. a vernacular name of an id that is not in the taxonomy)
++                    continue;
++                }
++
+                 if (!result.getTaxonConceptID().equals(lsid)) {
+                     // there were only 2 records where this was the case, include them
+                     List<String> speciesGroup = result.getSpeciesGroup();

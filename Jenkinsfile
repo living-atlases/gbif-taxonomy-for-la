@@ -60,6 +60,8 @@ pipeline {
            description: 'Also build the legacy Lucene 6 index')
     booleanParam(name: 'BUILD_DWCA',   defaultValue: true,
            description: 'Regenerate the modified DwCA for the BIE indexer')
+    booleanParam(name: 'BUILD_ATLAS_INDEX', defaultValue: true,
+           description: 'Also package the taxonomy for atlas-index search-service (DwCA + names-extract left/right and vernacular CSVs). Works with TEST_MODE too.')
     booleanParam(name: 'RUN_REGRESSION', defaultValue: true,
            description: 'Run the baseline-vs-new regression gate (fails the build on unexplained regressions)')
     booleanParam(name: 'PUBLISH',      defaultValue: false,
@@ -128,7 +130,7 @@ pipeline {
       // the --tests block precedes --namematching-index (so the index must exist first).
       when { expression { return params.TEST_MODE && !params.INSPECT_SCHEMA } }
       steps {
-        sh "./gbif-taxonomy-for-la-docker --backbone --prepare-tests --namematching-distri=${params.NM_DISTRI} --namematching-index ${env.RELEASE_SUFFIX}"
+        sh "./gbif-taxonomy-for-la-docker --backbone --prepare-tests --namematching-distri=${params.NM_DISTRI} --namematching-index ${params.BUILD_ATLAS_INDEX ? '--atlas-index ' : ''}${env.RELEASE_SUFFIX}"
         sh "./gbif-taxonomy-for-la-docker --tests ${env.RELEASE_SUFFIX}"
         // Same packaging code as a full build, so the artifact checks are worth running here
         // too — this is where they cost seconds instead of half an hour. MIN_CB_BYTES=0
@@ -157,6 +159,7 @@ pipeline {
           def flags = ['--namematching-index']
           if (params.LEGACY_INDEX) { flags << '--namematching-index-legacy' }
           if (params.BUILD_DWCA)   { flags << '--dwca' }
+          if (params.BUILD_ATLAS_INDEX) { flags << '--atlas-index' }
           sh "./gbif-taxonomy-for-la-docker --namematching-distri=${params.NM_DISTRI} ${flags.join(' ')} ${env.RELEASE_SUFFIX}"
         }
       }
