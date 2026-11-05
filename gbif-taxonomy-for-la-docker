@@ -10,7 +10,7 @@ docker rm -f gbif-taxonomy-for-la >/dev/null 2>&1 || true
 
 # Forward the indexer heap overrides (if set in the environment) so the index build can use
 # the agent's RAM without editing the image. Unset -> the script's defaults apply.
-docker run -v "$(pwd)/target:/data/lucene/target" -e NM_INDEX_XMX -e NM_INDEX_XMS -e SKIP_DOWNLOAD -e SUBSET_ROOT --name gbif-taxonomy-for-la gbif-taxonomy-for-la "$@"
+docker run -v "$(pwd)/target:/data/lucene/target" -e NM_INDEX_XMX -e NM_INDEX_XMS -e SKIP_DOWNLOAD --name gbif-taxonomy-for-la gbif-taxonomy-for-la "$@"
 status=$?
 docker rm -f gbif-taxonomy-for-la >/dev/null 2>&1 || true
 # Propagate the container's exit code (NOT `docker rm`'s), otherwise a failure inside the

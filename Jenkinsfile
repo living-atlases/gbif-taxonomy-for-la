@@ -47,7 +47,7 @@ pipeline {
     booleanParam(name: 'INSPECT_SCHEMA', defaultValue: true,
            description: 'Run the Step-1 spike only: extract COL DwCA meta.xml + sample rows (no index build), then stop. Defaults true during migration so the first SCM build is safe/light; set false for a real index build.')
     booleanParam(name: 'TEST_MODE', defaultValue: false,
-           description: 'Fast dev loop: build the index from a ~10k-taxon SUBSET (+ tested species) and run the mocha tests. Skips the full download/index. Minutes, not the full run.')
+           description: 'Fast dev loop: build the index from a ~6k-taxon SUBSET (the Carnivora clade) (+ tested species) and run the mocha tests. Skips the full download/index. Minutes, not the full run.')
     choice(name: 'PROFILE', choices: ['generic', 'es'],
            description: 'generic = backbone with all vernaculars. es = gbif-es index: forces FILTER_LANG=es,eu,ca,gl (if empty) and appends -es to RELEASE (if missing).')
     string(name: 'RELEASE',       defaultValue: '',
@@ -125,7 +125,7 @@ pipeline {
     }
 
     stage('Fast test (subset)') {
-      // Fast dev loop: download (cached) -> ~10k-taxon subset -> build a small index ->
+      // Fast dev loop: download (cached) -> ~6k-taxon subset -> build a small index ->
       // run mocha. Two docker runs because the script runs its blocks top-to-bottom, and
       // the --tests block precedes --namematching-index (so the index must exist first).
       when { expression { return params.TEST_MODE && !params.INSPECT_SCHEMA } }
@@ -134,7 +134,7 @@ pipeline {
         sh "./gbif-taxonomy-for-la-docker --tests ${env.RELEASE_SUFFIX}"
         // Same packaging code as a full build, so the artifact checks are worth running here
         // too — this is where they cost seconds instead of half an hour. MIN_CB_BYTES=0
-        // because a ~10k-taxon subset legitimately produces a tiny cb/.
+        // because a ~6k-taxon subset legitimately produces a tiny cb/.
         sh 'MIN_CB_BYTES=0 FILTER_LANG="$FILTER_LANG_EFFECTIVE" bash scripts/verify-artifacts.sh "$RELEASE_SUFFIX"'
       }
     }
@@ -202,7 +202,7 @@ pipeline {
       // /namedata, create the historical nameindex-* aliases (server-side symlinks), and
       // emit a paste-ready inventory snippet. A real stage (not post{}) so the sshagent is
       // in scope and an upload failure fails the build. See scripts/publish.sh.
-      // TEST_MODE is allowed here on purpose: the ~10k-taxon subset goes through the SAME
+      // TEST_MODE is allowed here on purpose: the ~6k-taxon subset goes through the SAME
       // packaging and publishing code, and a few-MB index is what la-docker-compose CI should
       // download instead of the 1.1 GB production one on every clean build (see the guard
       // below — the release must be named as a test artifact so it can never overwrite a real
@@ -227,7 +227,7 @@ pipeline {
       steps {
         // A subset build must never land on a release name a real index could use: the
         // download hosts key artifacts by name only, and overwriting the production index
-        // with 10k taxa would be silent until name matching started missing everything.
+        // with a 6k-taxon subset would be silent until name matching started missing everything.
         script {
           if (params.TEST_MODE && !(env.RELEASE_SUFFIX ==~ /(?i).*(test|subset).*/)) {
             error("TEST_MODE publish refused: RELEASE_SUFFIX='${env.RELEASE_SUFFIX}' does not look " +

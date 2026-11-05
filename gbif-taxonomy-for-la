@@ -135,25 +135,19 @@ fi
 
 if ($prepare_tests)
 then
-  # Build a self-consistent test subset: the first 10000 rows of Taxon.tsv.orig PLUS the
+  # Build a self-consistent test subset: a clade (below) PLUS the
   # namematching test taxa (Cenchrus setaceus; both Oenanthe genera) AND their full ancestor
   # lineage. ala-name-matching needs the parent chain (kingdom..genus) to place a taxon;
-  # COL XR's row order differs from the old GBIF backbone, so those ancestors are not in the
-  # first 10k rows. Without them Cenchrus setaceus does not match and the Oenanthe cross-
+  # those ancestors are not in the clade. Without them Cenchrus setaceus does not match and the Oenanthe cross-
   # kingdom homonym is not detected. Columns are resolved from the header by DwC term
   # (tolerating a dwc:/URI/col: prefix); Taxon.tsv.orig is read twice.
-  # SUBSET_ROOT=<scientific name> (e.g. Carnivora) replaces the first 10000 rows with that
-  # whole clade: every taxon under it, the synonyms of those, and the root's lineage. The
-  # first rows of COL XR have no ancestors in the subset, so the indexer drops them; a clade
-  # is what gives a usable small taxonomy (atlas-index search-service, CI, demos).
-  if [[ -n "$SUBSET_ROOT" ]]; then
-    echo "Creating a test subset (clade $SUBSET_ROOT + test taxa + their ancestor lineage)"
-    SUBSET_FIRST=0
-  else
-    echo "Creating a test subset (first 10000 rows + test taxa + their ancestor lineage)"
-    SUBSET_FIRST=10000
-  fi
-  awk -F'\t' -v FIRST="$SUBSET_FIRST" -v ROOT="$SUBSET_ROOT" '
+  # The subset is one whole clade (every taxon under it, their synonyms and the lineage) plus
+  # the test taxa. A clade, not the first N rows: those have no ancestors in the subset and the
+  # indexer drops them, so the index ended up with only the test lineage. A small but coherent
+  # taxonomy also serves atlas-index (--atlas-index), la-docker-compose CI and demos.
+  SUBSET_CLADE="Carnivora"
+  echo "Creating a test subset (clade $SUBSET_CLADE + test taxa + their ancestor lineage)"
+  awk -F'\t' -v ROOT="$SUBSET_CLADE" '
     function stripns(h){ sub(/^.*[:\/#]/,"",h); return h }
     function findcol(name,   i,h){ for(i=1;i<=NF;i++){ h=tolower(stripns($i)); if(h==tolower(name)) return i } return 0 }
     NR==FNR {
@@ -164,7 +158,7 @@ then
       if(ac && $ac!="" && $ac!=$idc) accepted[$idc]=$ac
       if($snc ~ /^Cenchrus setaceus([ ]|$)/){ seed[$idc]=1; nseed++ }
       if(trc && tolower($trc)=="genus" && $snc ~ /^Oenanthe([ ]|$)/){ seed[$idc]=1; nseed++ }
-      if(ROOT!="" && $snc ~ ("^" ROOT "([ ]|$)") && (!stc || tolower($stc) ~ /^accepted/)){ root[$idc]=1; seed[$idc]=1; nroot++ }
+      if($snc ~ ("^" ROOT "([ ]|$)") && (!stc || tolower($stc) ~ /^accepted/)){ root[$idc]=1; seed[$idc]=1; nroot++ }
       next
     }
     # In the clade if the id, or the taxon a synonym points to, has the root in its parent
@@ -177,10 +171,10 @@ then
       return res
     }
     FNR==1 { for(s in seed){ n=s; while(n!="" && !(n in need)){ need[n]=1; nneed++; n=parent[n] } } print; next }
-    { id=$idc; if(FNR<=FIRST || (id in need) || (nroot && inclade(id))){ if(!(id in seen)){ seen[id]=1; print } } }
+    { id=$idc; if((id in need) || inclade(id)){ if(!(id in seen)){ seen[id]=1; print } } }
     END {
       printf "prepare-tests: %d seed taxa, %d lineage rows injected into the subset\n", nseed, nneed > "/dev/stderr"
-      if(ROOT!="" && !nroot){ print "prepare-tests: SUBSET_ROOT " ROOT " not found" > "/dev/stderr"; exit 1 }
+      if(!nroot){ print "prepare-tests: subset clade " ROOT " not found" > "/dev/stderr"; exit 1 }
     }
   ' "$B/Taxon.tsv.orig" "$B/Taxon.tsv.orig" > "$B/Taxon-tests.tsv" \
     || { echo "ERROR: could not build the test subset (see message above)"; exit 1; }

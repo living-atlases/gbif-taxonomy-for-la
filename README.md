@@ -100,9 +100,6 @@ Environment overrides (all optional):
 
 - `SRC_TAXONOMY_URL` — source DwCA URL (default: COL XR latest).
 - `SKIP_DOWNLOAD=1` — reuse the cached archive under `target/cache/` instead of checking the remote.
-- `SUBSET_ROOT` — with `--prepare-tests`, take a whole clade (e.g. `Carnivora`: all taxa under it,
-  their synonyms and the lineage) instead of the first 10000 rows, which the indexer drops for
-  lacking ancestors. Gives a small subset that is actually usable (atlas-index, CI, demos).
 - `NM_INDEX_XMX` / `NM_INDEX_XMS` — indexer heap (default `8g` / `1g`); the wrapper forwards them into the container.
 - `NM_SERVER_VER` — ala-namematching-server version used by `--tests` / `--regression` (default `1.8.1`).
 
@@ -125,7 +122,7 @@ DwCA extensions are cut down to the subset's taxa too, which gives a small, cons
 for development and CI:
 
 ```bash
-SUBSET_ROOT=Carnivora ./gbif-taxonomy-for-la-docker --backbone --prepare-tests --namematching-index --atlas-index carnivora-subset
+./gbif-taxonomy-for-la-docker --backbone --prepare-tests --namematching-index --atlas-index testsubset
 ```
 
 ## CI (Jenkins) build & publish
@@ -137,7 +134,7 @@ Relevant job parameters:
 - `INSPECT_SCHEMA` — spike only: dump the COL DwCA `meta.xml` + sample rows
   ([`scripts/inspect-col-schema.sh`](scripts/inspect-col-schema.sh)) and stop. Defaults to
   `true`, so set it to `false` for a real build.
-- `TEST_MODE` — fast dev loop: build the index from a ~10k-taxon subset (plus the tested
+- `TEST_MODE` — fast dev loop: build the index from a ~6k-taxon subset, the Carnivora clade (plus the tested
   species and their ancestor lineage) and run the mocha suite. Minutes instead of a full run.
 - `PROFILE` — `generic` (all vernaculars) or `es` (the gbif-es index). `es` forces
   `FILTER_LANG=es,eu,ca,gl` when empty and appends `-es` to `RELEASE`, so it reproduces the
@@ -172,8 +169,8 @@ at **fixed backend IPs** and both backends are published (`PUBLISH_HOST` + `PUBL
 
 ## Tests
 
-`--prepare-tests` builds a self-consistent subset (first 10000 taxa **plus** the tested taxa and
-their full ancestor lineage — COL XR's row order differs from the old backbone, so the parents
+`--prepare-tests` builds a self-consistent subset (the whole Carnivora clade, ~6k taxa, **plus**
+the tested taxa and their full ancestor lineage — COL XR's row order differs from the old backbone, so the parents
 are not in the first rows), and `--tests` runs the transform checks plus the mocha suite against
 a namematching server. The index must exist before `--tests`, so it takes two runs:
 
