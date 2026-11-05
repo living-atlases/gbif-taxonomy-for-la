@@ -13,6 +13,10 @@ docker rm -f gbif-taxonomy-for-la >/dev/null 2>&1 || true
 docker run -v "$(pwd)/target:/data/lucene/target" -e NM_INDEX_XMX -e NM_INDEX_XMS -e SKIP_DOWNLOAD --name gbif-taxonomy-for-la gbif-taxonomy-for-la "$@"
 status=$?
 docker rm -f gbif-taxonomy-for-la >/dev/null 2>&1 || true
+# The container runs as root, so everything it writes under target/ is root's. Hand it back to
+# the calling user, or the next Jenkins checkout cannot clean the workspace ("Operation not
+# permitted") and the build fails before it starts.
+docker run --rm -v "$(pwd)/target:/t" --entrypoint chown gbif-taxonomy-for-la -R "$(id -u):$(id -g)" /t >/dev/null 2>&1 || true
 # Propagate the container's exit code (NOT `docker rm`'s), otherwise a failure inside the
 # container is swallowed and the pipeline goes green even when the index build failed.
 exit $status
